@@ -259,10 +259,24 @@ def cmd_send_one(path, dry_run=False):
 
 # ── 入口 ─────────────────────────────────────────────────────────────────────
 
+def cmd_auto_send():
+    """全自動寄出，不需要確認（供 app.py 呼叫）"""
+    pending = get_pending_notices()
+    sent = 0
+    for notice in pending:
+        if send_email(notice):
+            sent += 1
+    if sent:
+        print(f"[auto] 已寄出 {sent} 封")
+
 def main():
     args = sys.argv[1:]
     dry_run = "--dry-run" in args
-    args = [a for a in args if a != "--dry-run"]
+    args = [a for a in args if a not in ("--dry-run",)]
+
+    if "--auto-send" in sys.argv:
+        cmd_auto_send()
+        return
 
     if not args and not dry_run:
         cmd_list()

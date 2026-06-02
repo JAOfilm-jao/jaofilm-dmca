@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JAOfilm DMCA</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #111;
+    color: #fff;
+    font-family: "ABC Diatype", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: #1E1E1E;
+    border-bottom: 1px solid #333;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
+  .header .stats { display: flex; gap: 20px; }
+  .stat { text-align: center; }
+  .stat-num { font-size: 22px; font-weight: 700; }
+  .stat-num.red { color: #ff4d4d; }
+  .stat-num.yellow { color: #f5a623; }
+  .stat-num.green { color: #4caf50; }
+  .stat-label { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* Main */
+  .main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+
+  /* Add URL form */
+  .add-form {
+    background: #1E1E1E;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .add-form h2 { font-size: 13px; color: #888; margin-bottom: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row input {
+    flex: 1;
+    background: #111;
+    border: 1px solid #444;
+    border-radius: 5px;
+    color: #fff;
+    padding: 10px 14px;
+    font-size: 13px;
+    outline: none;
+  }
+  .form-row input:focus { border-color: #1610BB; }
+  .form-row input::placeholder { color: #555; }
+  .btn {
+    background: #1610BB;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0;
+  }
+  .btn:hover { background: #1a14d4; }
+  .btn.grey { background: #333; }
+  .btn.grey:hover { background: #444; }
+  .btn.red-btn { background: #cc2200; }
+  .btn.green-btn { background: #2a7a2a; }
+  .msg { margin-top: 10px; font-size: 12px; color: #888; min-height: 16px; }
+
+  /* Sections */
+  .section { margin-bottom: 28px; }
+  .section-title {
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #222;
+  }
+  .section-title span { font-size: 12px; font-weight: 700; }
+  .section-title .dot-red   { color: #ff4d4d; }
+  .section-title .dot-yellow{ color: #f5a623; }
+  .section-title .dot-green { color: #4caf50; }
+
+  /* Case cards */
+  .case-list { display: flex; flex-direction: column; gap: 8px; }
+  .case {
+    background: #1E1E1E;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .case.red    { border-left: 3px solid #ff4d4d; }
+  .case.yellow { border-left: 3px solid #f5a623; }
+  .case.green  { border-left: 3px solid #4caf50; }
+  .case.orange { border-left: 3px solid #ff8c00; }
+  .case.grey   { border-left: 3px solid #444; opacity: 0.6; }
+
+  .case-domain { font-weight: 600; font-size: 13px; min-width: 180px; }
+  .case-film   { color: #888; font-size: 12px; min-width: 140px; }
+  .case-action { flex: 1; font-size: 12px; }
+  .case-action.red    { color: #ff6b6b; }
+  .case-action.yellow { color: #f5a623; }
+  .case-action.green  { color: #4caf50; }
+  .case-action.orange { color: #ff8c00; }
+  .case-url {
+    color: #555;
+    font-size: 11px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .case-url:hover { color: #aaa; }
+  .case-days   { color: #555; font-size: 11px; min-width: 60px; text-align: right; }
+  .case-btns   { display: flex; gap: 6px; }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .badge.red    { background: rgba(255,77,77,0.15); color: #ff6b6b; }
+  .badge.yellow { background: rgba(245,166,35,0.15); color: #f5a623; }
+  .badge.green  { background: rgba(76,175,80,0.15); color: #4caf50; }
+
+  /* Monitor button */
+  .toolbar { display: flex; gap: 10px; margin-bottom: 24px; }
+  .monitor-output {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 5px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #aaa;
+    white-space: pre-wrap;
+    display: none;
+    margin-top: 10px;
+  }
+
+  /* Empty state */
+  .empty { color: #444; font-size: 13px; padding: 12px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>JAOfilm DMCA</h1>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num red">{{ need_human|length }}</div>
+      <div class="stat-label">需要你</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num yellow">{{ in_progress|length }}</div>
+      <div class="stat-label">進行中</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num green">{{ done|length }}</div>
+      <div class="stat-label">完成</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:#aaa">{{ total }}</div>
+      <div class="stat-label">總計</div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Add URL -->
+  <div class="add-form">
+    <h2>新增侵權連結</h2>
+    <div class="form-row">
+      <input type="url" id="url-input" placeholder="https://example.com/video/..." />
+      <input type="text" id="film-input" placeholder="影片名稱（選填）" style="max-width:200px" />
+      <button class="btn" onclick="addCase()">調查 + 申訴</button>
+    </div>
+    <div class="msg" id="add-msg"></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn grey" onclick="runMonitor()">🔄 立即掃描 CF 回信</button>
+    <button class="btn grey" onclick="location.reload()">↻ 更新</button>
+  </div>
+  <div class="monitor-output" id="monitor-out"></div>
+
+  <!-- Need human -->
+  <div class="section">
+    <div class="section-title"><span class="dot-red">●</span> 需要你操作 <span>({{ need_human|length }})</span></div>
+    <div class="case-list">
+      {% for c in need_human %}
+      <div class="case {{ c.action.color }}">
+        <div class="case-domain">{{ c.domain }}</div>
+        <div class="case-film">{{ c.film_title or '—' }}</div>
+        <div class="case-action {{ c.action.color }}">⚠️ {{ c.action.label }}</div>
+        <a class="case-url" href="{{ c.url }}" target="_blank" rel="noopener" title="{{ c.url }}">🔗 查看頁面</a>
+        <div class="case-days">{{ c.days_since }}</div>
+        <div class="case-btns">
+          {% if 'Google' in c.action.label %}
+          <button class="btn" onclick="fillGoogle({{ c.id }})">填表</button>
+          {% endif %}
+          <form method="post" action="/update/{{ c.id }}" style="display:inline">
+            <input type="hidden" name="status" value="removed">
+            <button type="submit" class="btn green-btn">✓ 已下架</button>
+          </form>
+          <form method="post" action="/update/{{ c.id }}" style="display:inline">
+            <input type="hidden" name="status" value="ignored">
+            <button type="submit" class="btn grey">忽略</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">沒有需要人工處理的案件 👍</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- In progress -->
+  <div class="section">
+    <div class="section-title"><span class="dot-yellow">●</span> 自動處理中 <span>({{ in_progress|length }})</span></div>
+    <div class="case-list">
+      {% for c in in_progress %}
+      <div class="case {{ c.action.color }}">
+        <div class="case-domain">{{ c.domain }}</div>
+        <div class="case-film">{{ c.film_title or '—' }}</div>
+        <div class="case-action {{ c.action.color }}">{{ c.action.label }}</div>
+        <a class="case-url" href="{{ c.url }}" target="_blank" rel="noopener" title="{{ c.url }}">🔗 查看頁面</a>
+        <div class="case-days">{{ c.days_since }}</div>
+        <div class="case-btns">
+          <form method="post" action="/update/{{ c.id }}" style="display:inline">
+            <input type="hidden" name="status" value="removed">
+            <button type="submit" class="btn green-btn">✓ 已下架</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">無</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Done -->
+  <div class="section">
+    <div class="section-title"><span class="dot-green">●</span> 完成 <span>({{ done|length }})</span></div>
+    <div class="case-list">
+      {% for c in done %}
+      <div class="case grey">
+        <div class="case-domain">{{ c.domain }}</div>
+        <div class="case-film">{{ c.film_title or '—' }}</div>
+        <div class="case-action">{{ c.action.label }}</div>
+        <a class="case-url" href="{{ c.url }}" target="_blank" rel="noopener" title="{{ c.url }}">🔗 查看頁面</a>
+        <div class="case-days">{{ c.days_since }}</div>
+      </div>
+      {% else %}
+      <div class="empty">尚無完成案件</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+async function addCase() {
+  const url   = document.getElementById("url-input").value.trim();
+  const film  = document.getElementById("film-input").value.trim();
+  const msg   = document.getElementById("add-msg");
+  if (!url) { msg.textContent = "請輸入 URL"; return; }
+  msg.textContent = "調查中...";
+  const fd = new FormData();
+  fd.append("url", url);
+  fd.append("film_title", film || "JAOfilm series");
+  const r = await fetch("/add", { method: "POST", body: fd });
+  const d = await r.json();
+  if (d.ok) {
+    msg.style.color = "#4caf50";
+    msg.textContent = d.message;
+    document.getElementById("url-input").value = "";
+    document.getElementById("film-input").value = "";
+    setTimeout(() => location.reload(), 3000);
+  } else {
+    msg.style.color = "#ff6b6b";
+    msg.textContent = d.error;
+  }
+}
+
+async function runMonitor() {
+  const out = document.getElementById("monitor-out");
+  out.style.display = "block";
+  out.textContent = "掃描中...";
+  const r = await fetch("/run-monitor", { method: "POST" });
+  const d = await r.json();
+  out.textContent = d.output;
+}
+
+async function fillGoogle(caseId) {
+  const r = await fetch(`/fill-google/${caseId}`, { method: "POST" });
+  const d = await r.json();
+  alert(d.message || d.error);
+}
+
+// Enter 送出
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("url-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") addCase();
+  });
+});
+</script>
+</body>
+</html>
