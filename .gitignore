@@ -1,0 +1,8 @@
+.env
+*.db
+.sent_notices.log
+__pycache__/
+*.pyc
+.DS_Store
+~/.jaofilm-dmca-chrome/
+/tmp/
