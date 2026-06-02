@@ -35,9 +35,12 @@ def next_action(case):
 
     if status == "submitted":
         days = (date.today() - date.fromisoformat(case["date_submitted"] or date.today().isoformat())).days
-        # 檢查是否有 Google notice 尚未處理
-        # 若 notes 裡已有 Google 檢舉 ID（格式 3-xxx 或 4-xxx），代表已送出
-        google_submitted = bool(re.search(r'\b[34]-\d{10,}\b', notes))
+        # 已有 google_report_id 欄位，或 notes 裡含任意格式的 Google 檢舉 ID
+        google_submitted = (
+            bool(case.get("google_report_id"))
+            or bool(re.search(r'\b\d+-\d{7,}\b', notes))
+            or "google dmca submitted" in notes.lower()
+        )
         if not google_submitted:
             domain_safe = (case["domain"] or "").replace(".", "_")
             google_notice = list(Path(__file__).parent.glob(f"notices/*_{domain_safe}_google.txt"))
@@ -111,32 +114,47 @@ def add_case():
             inv = investigate(url)
             case_id = tracker.add(url, film_title, inv)
 
-            # 生成 notices
             today = date.today().strftime("%Y-%m-%d")
             safe  = inv["domain"].replace(".", "_").replace("/", "_")
             notices_dir = Path(__file__).parent / "notices"
             os.makedirs(notices_dir, exist_ok=True)
 
-            if inv["abuse_emails"]:
-                path = notices_dir / f"{today}_{safe}_host.txt"
-                path.write_text(generate_host(url, inv["domain"], film_title,
-                    inv["hosting_org"], inv["abuse_emails"][0]))
+            is_platform = bool(inv.get("platform"))
 
-            if inv["is_cloudflare"]:
-                path = notices_dir / f"{today}_{safe}_cloudflare.txt"
-                path.write_text(generate_cloudflare(url, inv["domain"], film_title))
+            if is_platform:
+                # 已知平台（Twitter/PH/XV 等）：只走平台 email，跳過 host/CF
+                p = inv["platform"]
+                if p.get("email"):
+                    from generate import generate_platform
+                    path = notices_dir / f"{today}_{safe}_platform.txt"
+                    path.write_text(generate_platform(
+                        url, inv["domain"], film_title, p["name"]))
+            else:
+                # 一般盜版網站：走 host + CF
+                if inv["abuse_emails"]:
+                    path = notices_dir / f"{today}_{safe}_host.txt"
+                    path.write_text(generate_host(url, inv["domain"], film_title,
+                        inv["hosting_org"], inv["abuse_emails"][0]))
 
+                if inv["is_cloudflare"]:
+                    path = notices_dir / f"{today}_{safe}_cloudflare.txt"
+                    path.write_text(generate_cloudflare(url, inv["domain"], film_title))
+
+            # Google DMCA 永遠生成（搜尋流量最重要）
             path = notices_dir / f"{today}_{safe}_google.txt"
             path.write_text(generate_google_checklist(url, film_title))
 
             # 自動寄出 email notices
-            result = subprocess.run(
+            subprocess.run(
                 [sys.executable, "mailer.py", "--auto-send"],
                 capture_output=True, text=True,
                 cwd=str(Path(__file__).parent)
             )
 
-            # macOS 通知
+            # 更新案件狀態為 submitted
+            tracker.update(case_id, "submitted",
+                           f"自動寄出 {'平台 email' if is_platform else 'host/CF email'} ({date.today().isoformat()})")
+
             _notify("JAOfilm DMCA", f"新案件已調查完成：{inv['domain']}")
         except Exception as e:
             print(f"[investigate error] {e}")
@@ -181,10 +199,22 @@ def fill_google(case_id):
         return jsonify({"error": "找不到 Google notice 檔案"}), 404
 
     subprocess.Popen(
-        ["/opt/homebrew/bin/python3.11", "google_dmca.py", str(notices[0])],
+        ["/opt/homebrew/bin/python3.11", "google_dmca.py", str(notices[0]), str(case_id)],
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/google-dmca-reported", methods=["POST"])
+def google_dmca_reported():
+    """google_dmca.py 自動回報檢舉 ID"""
+    data = request.get_json(force=True)
+    case_id   = data.get("case_id")
+    report_id = data.get("report_id")
+    if not case_id or not report_id:
+        return jsonify({"error": "缺少 case_id 或 report_id"}), 400
+    tracker.set_google_report_id(int(case_id), report_id)
+    return jsonify({"ok": True, "report_id": report_id})
 
 
 @app.route("/check-all", methods=["POST"])

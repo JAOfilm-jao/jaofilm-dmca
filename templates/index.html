@@ -74,6 +74,7 @@
   .btn.grey:hover { background: #444; }
   .btn.red-btn { background: #cc2200; }
   .btn.green-btn { background: #2a7a2a; }
+  .google-id { font-size: 11px; color: #aaa; margin-left: 6px; vertical-align: middle; white-space: nowrap; }
   .msg { margin-top: 10px; font-size: 12px; color: #888; min-height: 16px; }
 
   /* Sections */
@@ -196,7 +197,7 @@
 
   <!-- Toolbar -->
   <div class="toolbar">
-    <button class="btn grey" onclick="runMonitor()">🔄 掃描 CF 回信</button>
+    <button class="btn grey" onclick="runMonitor()">🔄 掃描所有 DMCA 回信</button>
     <button class="btn grey" onclick="checkAll(this)">🔍 檢查所有連結是否下架</button>
     <button class="btn grey" onclick="location.reload()">↻ 更新</button>
   </div>
@@ -216,7 +217,10 @@
         <div class="case-days">{{ c.days_since }}</div>
         <div class="case-btns">
           {% if 'Google' in c.action.label %}
-          <button class="btn" onclick="fillGoogle({{ c.id }})">填表</button>
+          <button class="btn" onclick="fillGoogle({{ c.id }})" id="fill-btn-{{ c.id }}">填表</button>
+          {% if c.google_report_id %}
+          <span class="google-id" title="Google 檢舉 ID">🔖 {{ c.google_report_id }}</span>
+          {% endif %}
           {% endif %}
           <form method="post" action="/update/{{ c.id }}" style="display:inline">
             <input type="hidden" name="status" value="removed">
@@ -305,10 +309,14 @@ async function addCase() {
 async function runMonitor() {
   const out = document.getElementById("monitor-out");
   out.style.display = "block";
-  out.textContent = "掃描中...";
+  out.textContent = "掃描所有 DMCA 回信中...";
   const r = await fetch("/run-monitor", { method: "POST" });
   const d = await r.json();
   out.textContent = d.output;
+  // 若有 removed，自動刷新頁面
+  if (d.output && d.output.includes("removed=") && !d.output.includes("removed=0")) {
+    setTimeout(() => location.reload(), 2000);
+  }
 }
 
 async function checkAll(btn) {
@@ -342,7 +350,27 @@ async function checkAll(btn) {
 async function fillGoogle(caseId) {
   const r = await fetch(`/fill-google/${caseId}`, { method: "POST" });
   const d = await r.json();
-  alert(d.message || d.error);
+  if (d.error) { alert(d.error); return; }
+  const btn = document.getElementById(`fill-btn-${caseId}`);
+  if (btn) btn.textContent = "⏳ 等待提交...";
+  // 輪詢直到 google_report_id 出現（最多 5 分鐘）
+  for (let i = 0; i < 150; i++) {
+    await new Promise(res => setTimeout(res, 2000));
+    try {
+      const res = await fetch("/api/cases");
+      const cases = await res.json();
+      const c = cases.find(x => x.id === caseId);
+      if (c && c.google_report_id) {
+        if (btn) btn.textContent = "✅ 已提交";
+        const span = document.createElement("span");
+        span.className = "google-id";
+        span.title = "Google 檢舉 ID";
+        span.textContent = "🔖 " + c.google_report_id;
+        btn.insertAdjacentElement("afterend", span);
+        break;
+      }
+    } catch(e) {}
+  }
 }
 
 // Enter 送出

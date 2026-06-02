@@ -26,9 +26,14 @@ def init():
                 date_found      TEXT,
                 date_submitted  TEXT,
                 date_removed    TEXT,
-                notes           TEXT
+                notes           TEXT,
+                google_report_id TEXT
             )
         """)
+        # migration: add google_report_id if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(cases)").fetchall()]
+        if "google_report_id" not in cols:
+            conn.execute("ALTER TABLE cases ADD COLUMN google_report_id TEXT")
 
 def add(url, film_title, inv):
     init()
@@ -65,6 +70,14 @@ def update(case_id, status, notes=None):
             conn.execute("UPDATE cases SET status=? WHERE id=?", (status, case_id))
         if notes:
             conn.execute("UPDATE cases SET notes=? WHERE id=?", (notes, case_id))
+
+def set_google_report_id(case_id, report_id):
+    init()
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cases SET google_report_id=? WHERE id=?",
+            (report_id, case_id)
+        )
 
 def list_all(status=None):
     init()
