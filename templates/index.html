@@ -196,10 +196,12 @@
 
   <!-- Toolbar -->
   <div class="toolbar">
-    <button class="btn grey" onclick="runMonitor()">🔄 立即掃描 CF 回信</button>
+    <button class="btn grey" onclick="runMonitor()">🔄 掃描 CF 回信</button>
+    <button class="btn grey" onclick="checkAll(this)">🔍 檢查所有連結是否下架</button>
     <button class="btn grey" onclick="location.reload()">↻ 更新</button>
   </div>
   <div class="monitor-output" id="monitor-out"></div>
+  <div class="monitor-output" id="check-out"></div>
 
   <!-- Need human -->
   <div class="section">
@@ -307,6 +309,34 @@ async function runMonitor() {
   const r = await fetch("/run-monitor", { method: "POST" });
   const d = await r.json();
   out.textContent = d.output;
+}
+
+async function checkAll(btn) {
+  const out = document.getElementById("check-out");
+  out.style.display = "block";
+  out.textContent = "檢查中，請稍候（約 10–30 秒）...";
+  btn.disabled = true;
+  btn.textContent = "⏳ 檢查中...";
+  const r = await fetch("/check-all", { method: "POST" });
+  const d = await r.json();
+
+  const icons = { removed: "✅", up: "❌", check: "⚠️", unknown: "❓" };
+  let txt = `掃描完成\n`;
+  txt += `✅ 已確認下架：${d.confirmed}　`;
+  txt += `❌ 仍在線：${d.up}　`;
+  txt += `⚠️ 請手動確認：${d.need_check}\n`;
+  txt += `${"─".repeat(60)}\n`;
+  for (const item of d.results) {
+    const icon = icons[item.verdict] || "❓";
+    txt += `${icon}  ${item.domain.padEnd(26)} ${item.label}\n`;
+  }
+  if (d.need_check > 0) {
+    txt += `\n⚠️  標記「請手動確認」的網站，請點連結親眼查看後再按「✓ 已下架」`;
+  }
+  out.textContent = txt;
+  btn.disabled = false;
+  btn.textContent = "🔍 檢查所有連結是否下架";
+  if (d.confirmed > 0) setTimeout(() => location.reload(), 3000);
 }
 
 async function fillGoogle(caseId) {

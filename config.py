@@ -28,8 +28,8 @@ PLATFORM_CONTACTS = {
     "spankbang.com":{"name": "SpankBang",        "email": "abuse@spankbang.com",      "form": None},
     "t.me":         {"name": "Telegram",         "email": "dmca@telegram.org",        "form": None},
     "telegram.me":  {"name": "Telegram",         "email": "dmca@telegram.org",        "form": None},
-    "twitter.com":  {"name": "Twitter/X",        "email": None,                        "form": "https://help.twitter.com/forms/dmca"},
-    "x.com":        {"name": "Twitter/X",        "email": None,                        "form": "https://help.twitter.com/forms/dmca"},
+    "twitter.com":  {"name": "Twitter/X",        "email": "copyright@twitter.com",    "form": "https://help.twitter.com/forms/dmca"},
+    "x.com":        {"name": "Twitter/X",        "email": "copyright@twitter.com",    "form": "https://help.twitter.com/forms/dmca"},
     "reddit.com":   {"name": "Reddit",           "email": "copyright@reddit.com",     "form": "https://www.redditinc.com/policies/user-agreement"},
 }
 

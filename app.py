@@ -6,6 +6,7 @@ JAOfilm DMCA Web App
 """
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -34,12 +35,15 @@ def next_action(case):
 
     if status == "submitted":
         days = (date.today() - date.fromisoformat(case["date_submitted"] or date.today().isoformat())).days
-        # 檢查是否有 Google notice 未處理
-        domain = (case["domain"] or "").replace(".", "_")
-        google_notice = list(Path(__file__).parent.glob(f"notices/*_{domain}_google.txt"))
-        if google_notice:
-            return {"type": "human", "label": "Google DMCA 表單待送出", "color": "red",
-                    "notice": str(google_notice[0])}
+        # 檢查是否有 Google notice 尚未處理
+        # 若 notes 裡已有 Google 檢舉 ID（格式 3-xxx 或 4-xxx），代表已送出
+        google_submitted = bool(re.search(r'\b[34]-\d{10,}\b', notes))
+        if not google_submitted:
+            domain_safe = (case["domain"] or "").replace(".", "_")
+            google_notice = list(Path(__file__).parent.glob(f"notices/*_{domain_safe}_google.txt"))
+            if google_notice:
+                return {"type": "human", "label": "Google DMCA 表單待送出", "color": "red",
+                        "notice": str(google_notice[0])}
         # Razorblade 補件模式
         if "補件" in notes or "razorblade" in notes.lower() or "missing" in notes.lower():
             return {"type": "human", "label": "主機商要求補件", "color": "red"}
@@ -181,6 +185,90 @@ def fill_google(case_id):
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/check-all", methods=["POST"])
+def check_all():
+    """ping 所有 submitted 案件，回傳結果讓使用者確認後再標記"""
+    import requests
+    rows = tracker.list_all()
+    results = []
+
+    for r in rows:
+        if r["status"] not in ("submitted", "pending"):
+            continue
+        url    = r["url"]
+        domain = r["domain"] or ""
+
+        try:
+            resp = requests.get(
+                url, timeout=12, allow_redirects=True,
+                headers={"User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                )},
+                verify=True,
+            )
+            code = resp.status_code
+        except requests.exceptions.SSLError:
+            code = -1   # SSL 錯誤，不代表下架
+        except requests.exceptions.Timeout:
+            code = -2   # 超時，不代表下架
+        except requests.exceptions.ConnectionError:
+            code = -3   # 連線拒絕，可能下架
+        except Exception:
+            code = -9   # 其他未知錯誤
+
+        # 判斷邏輯：只有明確 HTTP 404/410 才自動確認下架
+        if code == 404:
+            verdict = "removed"
+            label   = "404 — 影片已刪除"
+        elif code == 410:
+            verdict = "removed"
+            label   = "410 — 永久移除"
+        elif code == 200:
+            verdict = "up"
+            label   = "200 — 仍在線"
+        elif code in (301, 302, 307, 308):
+            verdict = "up"
+            label   = f"{code} — 重新導向（仍活著）"
+        elif code == 403:
+            verdict = "unknown"
+            label   = "403 — 拒絕存取（無法確認）"
+        elif code == -1:
+            verdict = "unknown"
+            label   = "SSL 錯誤（無法確認，需手動查）"
+        elif code == -2:
+            verdict = "unknown"
+            label   = "連線逾時（無法確認，需手動查）"
+        elif code == -3:
+            verdict = "check"
+            label   = "連線拒絕（可能下架，請手動確認）"
+        else:
+            verdict = "unknown"
+            label   = f"HTTP {code}（無法確認）"
+
+        # 只有 404/410 才自動更新 tracker，其餘讓使用者決定
+        if verdict == "removed":
+            tracker.update(r["id"], "removed",
+                           f"自動偵測 {label} ({date.today().isoformat()})")
+            _notify("JAOfilm DMCA ✅", f"{domain} 已確認下架（{label}）")
+
+        results.append({
+            "id": r["id"], "domain": domain, "url": url,
+            "code": code, "verdict": verdict, "label": label,
+        })
+
+    confirmed = sum(1 for r in results if r["verdict"] == "removed")
+    up        = sum(1 for r in results if r["verdict"] == "up")
+    need_check = sum(1 for r in results if r["verdict"] == "check")
+    return jsonify({
+        "results": results,
+        "confirmed": confirmed,
+        "up": up,
+        "need_check": need_check,
+    })
 
 
 @app.route("/api/cases")

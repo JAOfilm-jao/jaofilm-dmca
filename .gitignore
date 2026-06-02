@@ -1,8 +1,12 @@
 .env
 *.db
 .sent_notices.log
+.processed_cf_emails.log
+.gmail_credentials.json
+.gmail_token.json
+client_secret_*.json
 __pycache__/
 *.pyc
 .DS_Store
-~/.jaofilm-dmca-chrome/
+logs/
 /tmp/
