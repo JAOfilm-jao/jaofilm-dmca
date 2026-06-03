@@ -26,6 +26,34 @@ scheduler = BackgroundScheduler()
 
 # ── 輔助：判斷案件的「下一步行動」 ─────────────────────────────────────────
 
+def _find_google_notice(case):
+    """找對應的 Google notice 檔，支援三種命名：domain / slug / URL 內容比對"""
+    notice_dir  = Path(__file__).parent / "notices"
+    domain_safe = (case.get("domain") or "").replace(".", "_")
+    case_url    = case.get("url") or ""
+
+    # 1. 標準命名：*_{domain}_google.txt
+    hits = list(notice_dir.glob(f"*_{domain_safe}_google.txt"))
+    if hits:
+        return hits[0]
+
+    # 2. 包含 domain 的寬鬆命名：*{domain}*google.txt
+    hits = [f for f in notice_dir.glob("*google.txt") if domain_safe in f.name]
+    if hits:
+        return hits[0]
+
+    # 3. 讀檔內容，比對 Infringing URL 是否含案件 URL
+    if case_url:
+        for f in notice_dir.glob("*google.txt"):
+            try:
+                if case_url in f.read_text(encoding="utf-8", errors="ignore"):
+                    return f
+            except Exception:
+                pass
+
+    return None
+
+
 def next_action(case):
     status = case["status"]
     notes  = case["notes"] or ""
@@ -42,11 +70,10 @@ def next_action(case):
             or "google dmca submitted" in notes.lower()
         )
         if not google_submitted:
-            domain_safe = (case["domain"] or "").replace(".", "_")
-            google_notice = list(Path(__file__).parent.glob(f"notices/*_{domain_safe}_google.txt"))
+            google_notice = _find_google_notice(case)
             if google_notice:
                 return {"type": "human", "label": "Google DMCA 表單待送出", "color": "red",
-                        "notice": str(google_notice[0])}
+                        "notice": str(google_notice)}
         # Razorblade 補件模式
         if "補件" in notes or "razorblade" in notes.lower() or "missing" in notes.lower():
             return {"type": "human", "label": "主機商要求補件", "color": "red"}
@@ -193,13 +220,12 @@ def fill_google(case_id):
     if not case:
         return jsonify({"error": "案件不存在"}), 404
 
-    domain = (case["domain"] or "").replace(".", "_")
-    notices = list(Path(__file__).parent.glob(f"notices/*_{domain}_google.txt"))
-    if not notices:
+    notice = _find_google_notice(dict(case))
+    if not notice:
         return jsonify({"error": "找不到 Google notice 檔案"}), 404
 
     subprocess.Popen(
-        ["/opt/homebrew/bin/python3.11", "google_dmca.py", str(notices[0]), str(case_id)],
+        ["/opt/homebrew/bin/python3.11", "google_dmca.py", str(notice), str(case_id)],
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
