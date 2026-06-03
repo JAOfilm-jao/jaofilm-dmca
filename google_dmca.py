@@ -37,8 +37,10 @@ def parse_notice(path):
 
     # 收集所有 https:// 開頭的 URL（含 Additional infringing URLs 區塊）
     all_urls = re.findall(r'https?://\S+', text)
-    # 排除版權著作 URL（jaofilm.com）
-    infringing_urls = [u for u in all_urls if 'jaofilm.com' not in u]
+    # 排除非侵權 URL：版權著作頁、Google 本身的支援頁、notice 範本連結
+    EXCLUDE = ('jaofilm.com', 'support.google.com', 'google.com/legal',
+               'help.x.com', 'help.twitter.com', 'icann.org', 'lumen.systems')
+    infringing_urls = [u for u in all_urls if not any(e in u for e in EXCLUDE)]
     # 去重保序
     seen = set()
     deduped = []
