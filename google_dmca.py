@@ -34,10 +34,24 @@ def parse_notice(path):
     def get(label):
         m = re.search(rf"{label}:\s*(.+)", text)
         return m.group(1).strip() if m else ""
+
+    # 收集所有 https:// 開頭的 URL（含 Additional infringing URLs 區塊）
+    all_urls = re.findall(r'https?://\S+', text)
+    # 排除版權著作 URL（jaofilm.com）
+    infringing_urls = [u for u in all_urls if 'jaofilm.com' not in u]
+    # 去重保序
+    seen = set()
+    deduped = []
+    for u in infringing_urls:
+        if u not in seen:
+            seen.add(u)
+            deduped.append(u)
+
     return {
-        "work_title":     get("Copyrighted work"),
-        "description":    get("Description"),
-        "infringing_url": get("Infringing URL"),
+        "work_title":      get("Copyrighted work"),
+        "description":     get("Description"),
+        "infringing_url":  deduped[0] if deduped else get("Infringing URL"),
+        "infringing_urls": deduped,   # 全部 URL，用於多 URL 填表
     }
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────
@@ -46,9 +60,12 @@ async def run(notice_path: str, case_id: str = None):
     data = parse_notice(notice_path)
     desc = f"{data['description']}. Title: {data['work_title']}"
 
+    url_count = len(data.get('infringing_urls', [data['infringing_url']]))
     print(f"\n📄  {notice_path}")
     print(f"    片名: {data['work_title']}")
     print(f"    URL:  {data['infringing_url'][:80]}")
+    if url_count > 1:
+        print(f"    ⚡ 多 URL 模式：共 {url_count} 個連結將一次填入")
     print(f"\n⚠️   填表中，請不要碰 Chrome\n")
 
     async with async_playwright() as p:
@@ -182,8 +199,12 @@ async def run(notice_path: str, case_id: str = None):
         # aria-label: "在這裡輸入說明" / "在這裡輸入範例" / "在這裡輸入網址"
         await fill_by_label([r"在這裡輸入說明|著作說明|description|work.?description"], desc)
         await fill_by_label([r"在這裡輸入範例|版權著作.*url|authorized.*url|著作.*網址"], COPYRIGHT_URL)
-        await fill_by_label([r"在這裡輸入網址|侵權.*url|infringing.*url|侵害.*網址"], data["infringing_url"])
-        print(f"  ✅ URL 填寫完成")
+
+        # 多 URL 模式：一行一個填入 textarea（Google 支援最多 1000 行）
+        urls = data.get("infringing_urls") or [data["infringing_url"]]
+        infringing_value = "\n".join(urls)
+        await fill_by_label([r"在這裡輸入網址|侵權.*url|infringing.*url|侵害.*網址"], infringing_value)
+        print(f"  ✅ 侵權 URL 填寫完成（{len(urls)} 個）")
 
         # 宣誓 checkbox（全勾）
         checkboxes = page.get_by_role("checkbox")
