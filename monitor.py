@@ -221,8 +221,8 @@ def get_header(msg: dict, name: str) -> str:
 def scan_once(service, dry_run=False) -> dict:
     print(f"\n🔍  掃描 DMCA 信件... ({datetime.now().strftime('%H:%M:%S')})")
 
-    # 掃所有寄到 jao@jaofilm.com 且含 DMCA 關鍵字的信件
-    query = "to:jao@jaofilm.com DMCA newer_than:60d"
+    # 掃所有 DMCA 相關信件（jao@ 和 info@ 都在同一個帳號，不限 to:）
+    query = "DMCA newer_than:60d -from:me"
     result = service.users().messages().list(userId="me", q=query, maxResults=50).execute()
     messages = result.get("messages", [])
 
