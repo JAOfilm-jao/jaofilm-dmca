@@ -81,10 +81,13 @@ COPYRIGHT OWNER:
         + _footer()
     )
 
-def generate_platform(url, domain, film_title, platform_name):
+def generate_platform(url, domain, film_title, platform_name, platform_email=None):
+    to_line = f"{platform_name} DMCA / Content Team"
+    if platform_email:
+        to_line += f"\n{platform_email}"
     return (
         f"Subject: DMCA Copyright Infringement Notice – {film_title}\n\n"
-        + _header(f"{platform_name} DMCA / Content Team")
+        + _header(to_line)
         + f"""I am the copyright owner of the audiovisual work described below and am requesting immediate removal of infringing content from {platform_name}.
 
 COPYRIGHT OWNER:

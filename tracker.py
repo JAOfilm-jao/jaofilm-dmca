@@ -1,7 +1,8 @@
 import sqlite3
 from datetime import date
+from pathlib import Path
 
-DB = "tracker.db"
+DB = str(Path(__file__).parent / "tracker.db")
 
 def _conn():
     conn = sqlite3.connect(DB)
