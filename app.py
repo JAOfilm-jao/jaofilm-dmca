@@ -55,8 +55,18 @@ def _find_google_notice(case):
 
 
 def next_action(case):
+    import json as _json
     status = case["status"]
     notes  = case["notes"] or ""
+
+    # 待確認送出的草稿（X reply 等）
+    if case.get("pending_action"):
+        try:
+            action = _json.loads(case["pending_action"])
+            label  = {"x_reply": "X DMCA 補件 — 待你確認送出"}.get(action.get("type"), "待確認動作")
+            return {"type": "human", "label": label, "color": "red", "pending": action}
+        except Exception:
+            pass
 
     if status == "pending":
         return {"type": "auto", "label": "待調查 + 寄信", "color": "yellow"}
@@ -229,6 +239,85 @@ def fill_google(case_id):
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/send-pending/<int:case_id>", methods=["POST"])
+def send_pending(case_id):
+    """確認送出 pending_action（目前支援 x_reply）"""
+    import json as _json
+    rows = tracker.list_all()
+    case = next((r for r in rows if r["id"] == case_id), None)
+    if not case or not case["pending_action"]:
+        return jsonify({"error": "找不到待送出草稿"}), 404
+
+    action = _json.loads(case["pending_action"])
+    notice = {
+        "subject": action["subject"],
+        "to":      action["to"],
+        "body":    action["body"],
+        "path":    None,
+    }
+    ok = mailer.send_email(notice)
+    if ok:
+        tracker.clear_pending_action(case_id)
+        notes = (case["notes"] or "") + f" | {action.get('type','reply')} 已送出 {date.today().isoformat()}"
+        tracker.update(case_id, case["status"], notes)
+        return jsonify({"ok": True, "message": f"已送出至 {action['to']}"})
+    return jsonify({"error": "寄信失敗"}), 500
+
+
+@app.route("/add-bulk", methods=["POST"])
+def add_bulk():
+    """批量新增侵權 URL（一次最多 20 個）"""
+    data       = request.get_json(force=True)
+    urls       = [u.strip() for u in (data.get("urls") or []) if u.strip()][:20]
+    film_title = data.get("film_title", "JAOfilm series").strip() or "JAOfilm series"
+
+    if not urls:
+        return jsonify({"error": "沒有 URL"}), 400
+
+    def process_all():
+        for url in urls:
+            try:
+                from urllib.parse import urlparse
+                domain = urlparse(url).netloc.lower().lstrip("www.")
+                if any(s in domain for s in LEGITIMATE_SOURCES):
+                    print(f"[bulk skip] {url} — 合法來源")
+                    continue
+                inv     = investigate(url)
+                case_id = tracker.add(url, film_title, inv)
+                today   = date.today().strftime("%Y-%m-%d")
+                safe    = inv["domain"].replace(".", "_").replace("/", "_")
+                notices_dir = Path(__file__).parent / "notices"
+                os.makedirs(notices_dir, exist_ok=True)
+                is_platform = bool(inv.get("platform"))
+                if is_platform:
+                    p = inv["platform"]
+                    if p.get("email"):
+                        from generate import generate_platform
+                        path = notices_dir / f"{today}_{safe}_platform.txt"
+                        path.write_text(generate_platform(url, inv["domain"], film_title, p["name"]))
+                else:
+                    if inv["abuse_emails"]:
+                        path = notices_dir / f"{today}_{safe}_host.txt"
+                        path.write_text(generate_host(url, inv["domain"], film_title,
+                            inv["hosting_org"], inv["abuse_emails"][0]))
+                    if inv["is_cloudflare"]:
+                        path = notices_dir / f"{today}_{safe}_cloudflare.txt"
+                        path.write_text(generate_cloudflare(url, inv["domain"], film_title))
+                path = notices_dir / f"{today}_{safe}_google.txt"
+                path.write_text(generate_google_checklist(url, film_title))
+                subprocess.run([sys.executable, "mailer.py", "--auto-send"],
+                    capture_output=True, text=True, cwd=str(Path(__file__).parent))
+                tracker.update(case_id, "submitted",
+                    f"批量送出 {date.today().isoformat()}")
+                print(f"[bulk] #{case_id} {inv['domain']} done")
+            except Exception as e:
+                print(f"[bulk error] {url}: {e}")
+
+    import threading
+    threading.Thread(target=process_all, daemon=True).start()
+    return jsonify({"ok": True, "message": f"正在處理 {len(urls)} 個 URL，稍後重整查看結果"})
 
 
 @app.route("/google-dmca-reported", methods=["POST"])

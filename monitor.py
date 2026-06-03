@@ -91,21 +91,32 @@ def get_gmail_service():
 def classify_email(sender: str, subject: str, body: str) -> str:
     """
     回傳分類：
-      cf_receipt  - CF 收件確認（不含主機商）
-      cf_info     - CF 含主機商資訊
-      removed     - 任何寄件人確認移除
-      denied      - 拒絕處理
-      unknown     - 需人工判斷
+      cf_receipt    - CF / 登記商收件確認
+      cf_info       - CF 含主機商資訊
+      x_supplement  - X/Twitter 要求補件（DMCA 格式）
+      removed       - 任何寄件人確認移除
+      denied        - 拒絕處理
+      unknown       - 需人工判斷
     """
     sender_l = sender.lower()
     body_l   = body.lower()
 
     # Cloudflare 信件
     if "cloudflare.com" in sender_l:
-        # 含主機商資訊（真正的 CF response）
         if re.search(r"host for the reported domain is", body, re.I):
             return "cf_info"
         return "cf_receipt"
+
+    # 登記商/一般收件確認
+    if any(s in sender_l for s in ("name.com", "godaddy.com", "namecheap.com")):
+        if re.search(r"report received|thank you for contacting|this inbox is not monitored", body_l):
+            return "cf_receipt"
+
+    # X/Twitter 補件請求
+    if "legal-support@x.com" in sender_l or "legal-support@twitter.com" in sender_l:
+        if re.search(r"please submit the following information|electronic signature", body_l):
+            return "x_supplement"
+        return "cf_receipt"  # 其他 X 自動確認
 
     # 移除確認
     for sig in REMOVAL_SIGNALS:
@@ -136,6 +147,31 @@ def verify_url_down(url: str) -> bool:
         return True
 
 # ── 解析 CF 主機商資訊 ────────────────────────────────────────────────────────
+
+def compose_x_dmca_reply(infringing_url: str, film_title: str) -> str:
+    from config import COPYRIGHT_OWNER, CONTACT_EMAIL, WEBSITE
+    return f"""1. Electronic Signature:
+{COPYRIGHT_OWNER}
+
+2. Description of Copyrighted Work:
+Original adult film produced and exclusively owned by JAOfilm.
+Title: {film_title}
+Link to authorized work: {WEBSITE}
+
+3. Location of Infringing Material:
+{infringing_url}
+
+4. Contact Information:
+JAOfilm
+{CONTACT_EMAIL}
+
+5. Good Faith Statement:
+I have a good faith belief that the use of the material in the manner complained of isn't authorized by the copyright owner, its agent, or the law.
+
+6. Accuracy Statement:
+I swear under penalty of perjury that I am authorized to act on behalf of the copyright owner.
+"""
+
 
 def parse_cf_host_info(body: str) -> dict:
     result = {"domain": None, "host_org": None, "host_email": None, "report_id": None}
@@ -246,10 +282,48 @@ def scan_once(service, dry_run=False) -> dict:
         print(f"\n  📨  [{kind}] {sender[:50]}")
         print(f"      Subject: {subject[:70]}")
 
-        # ── CF 收件確認：跳過 ──────────────────────────────────────────────
+        # ── CF / 登記商收件確認：跳過 ─────────────────────────────────────
         if kind == "cf_receipt":
-            print("      → CF 收件確認，跳過")
+            print("      → 收件確認，跳過")
             mark_processed(msg_id)
+            continue
+
+        # ── X/Twitter 補件請求：自動草稿 ──────────────────────────────────
+        if kind == "x_supplement":
+            case = find_case_by_email_body(sender, subject, body)
+            # 從 subject 抓 ticket ID
+            ticket_m = re.search(r'(LEGAL-\d+)', subject)
+            ticket_id = ticket_m.group(1) if ticket_m else "LEGAL-UNKNOWN"
+
+            infringing_url = case["url"] if case else ""
+            film_title     = case["film_title"] if case else "JAOfilm series"
+            reply_body     = compose_x_dmca_reply(infringing_url, film_title)
+
+            action = {
+                "type":    "x_reply",
+                "to":      "legal-support@x.com",
+                "subject": f"Re: {ticket_id}: DMCA Copyright Infringement Notice – JAOfilm",
+                "body":    reply_body,
+                "ticket_id": ticket_id,
+            }
+
+            if case and not dry_run:
+                tracker.set_pending_action(case["id"], action)
+                print(f"      ✅  X 補件草稿已存入 case #{case['id']}，待你在 Dashboard 確認送出")
+            else:
+                print(f"      ⚠️  X 補件，找不到對應案件（ticket={ticket_id}）")
+                if not dry_run:
+                    # 建新 case 存入
+                    inv = {"domain": "x.com", "ip": "", "hosting_org": "", "hosting_country": "US",
+                           "is_cloudflare": False, "platform": {"name": "Twitter/X", "email": "legal-support@x.com"},
+                           "abuse_emails": []}
+                    new_id = tracker.add(infringing_url or "https://x.com/", "JAOfilm series", inv)
+                    tracker.set_pending_action(new_id, action)
+                    tracker.update(new_id, "submitted")
+                    print(f"      ✅  新建 case #{new_id} 並存入草稿")
+
+            mark_processed(msg_id)
+            stats["processed"] += 1
             continue
 
         # ── CF 含主機商：補寄 host notice ─────────────────────────────────

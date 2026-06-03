@@ -31,10 +31,12 @@ def init():
                 google_report_id TEXT
             )
         """)
-        # migration: add google_report_id if missing
+        # migrations
         cols = [r[1] for r in conn.execute("PRAGMA table_info(cases)").fetchall()]
         if "google_report_id" not in cols:
             conn.execute("ALTER TABLE cases ADD COLUMN google_report_id TEXT")
+        if "pending_action" not in cols:
+            conn.execute("ALTER TABLE cases ADD COLUMN pending_action TEXT")
 
 def add(url, film_title, inv):
     init()
@@ -71,6 +73,19 @@ def update(case_id, status, notes=None):
             conn.execute("UPDATE cases SET status=? WHERE id=?", (status, case_id))
         if notes:
             conn.execute("UPDATE cases SET notes=? WHERE id=?", (notes, case_id))
+
+def set_pending_action(case_id, action_dict):
+    """存待確認動作（JSON），action_dict = {type, to, subject, body}"""
+    init()
+    import json as _json
+    with _conn() as conn:
+        conn.execute("UPDATE cases SET pending_action=? WHERE id=?",
+                     (_json.dumps(action_dict, ensure_ascii=False), case_id))
+
+def clear_pending_action(case_id):
+    init()
+    with _conn() as conn:
+        conn.execute("UPDATE cases SET pending_action=NULL WHERE id=?", (case_id,))
 
 def set_google_report_id(case_id, report_id):
     init()
