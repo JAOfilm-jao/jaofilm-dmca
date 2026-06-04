@@ -52,14 +52,45 @@ EMAIL_TYPES = ("_host", "_cloudflare", "_platform")
 SKIP_TYPES  = ("_google",)          # 需要瀏覽器填表
 SENT_LOG    = Path(__file__).parent / ".sent_notices.log"
 
+def _sent_key(path):
+    """
+    從 notice 路徑提取 'domain:type' dedup key。
+    例：2026-06-04_gayforit_eu_cloudflare.txt → 'gayforit.eu:cloudflare'
+    跨日期相同 domain+type 只算一次。
+    """
+    stem = Path(path).stem  # e.g. 2026-06-04_gayforit_eu_cloudflare
+    for ntype in ("cloudflare", "host", "platform"):
+        if f"_{ntype}" in stem:
+            without_date = "_".join(stem.split("_")[1:])   # e.g. gayforit_eu_cloudflare
+            # 取 _{ntype} 之前的部分（忽略 _godaddy / _all 等後綴）
+            idx = without_date.find(f"_{ntype}")
+            domain = ".".join(without_date[:idx].split("_"))
+            return f"{domain}:{ntype}"
+    return Path(path).name  # fallback
+
 def already_sent(path):
-    if SENT_LOG.exists():
-        return str(path) in SENT_LOG.read_text()
+    if not SENT_LOG.exists():
+        return False
+    key = _sent_key(path)
+    for line in SENT_LOG.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line == key:                          # 新格式直接比對
+            return True
+        if line == str(path) or Path(line).name == Path(path).name:
+            return True                          # 舊格式：同路徑或同檔名
+        if line.endswith(".txt") and _sent_key(line) == key:
+            return True                          # 舊格式路徑 → 轉換 key 比對（跨日期 dedup）
     return False
 
 def mark_sent(path):
+    key = _sent_key(path)
+    # 避免 log 自身也重複寫入
+    if SENT_LOG.exists() and key in SENT_LOG.read_text():
+        return
     with SENT_LOG.open("a") as f:
-        f.write(str(path) + "\n")
+        f.write(key + "\n")
 
 # ── Tracker DB helpers ────────────────────────────────────────────────────────
 
