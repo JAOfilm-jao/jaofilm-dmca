@@ -27,29 +27,42 @@ scheduler = BackgroundScheduler()
 # ── 輔助：判斷案件的「下一步行動」 ─────────────────────────────────────────
 
 def _find_google_notice(case):
-    """找對應的 Google notice 檔，支援三種命名：domain / slug / URL 內容比對"""
+    """
+    找對應的 Google notice 檔。優先順序：
+    1. case-ID 專屬命名：*_c{id}_google.txt（新格式，最精確）
+    2. URL 內容比對：檔案內含案件 URL（防同 domain 多案件互相干擾）
+    3. domain 命名 fallback：*_{domain}_google.txt（舊格式相容）
+    """
     notice_dir  = Path(__file__).parent / "notices"
     domain_safe = (case.get("domain") or "").replace(".", "_")
+    case_id     = case.get("id")
     case_url    = case.get("url") or ""
 
-    # 1. 標準命名：*_{domain}_google.txt
-    hits = list(notice_dir.glob(f"*_{domain_safe}_google.txt"))
-    if hits:
-        return hits[0]
+    # 1. case-ID 專屬命名（新格式）
+    if case_id:
+        hits = list(notice_dir.glob(f"*_c{case_id}_google.txt"))
+        if hits:
+            return hits[0]
 
-    # 2. 包含 domain 的寬鬆命名：*{domain}*google.txt
-    hits = [f for f in notice_dir.glob("*google.txt") if domain_safe in f.name]
-    if hits:
-        return hits[0]
-
-    # 3. 讀檔內容，比對 Infringing URL 是否含案件 URL
+    # 2. URL 內容比對（最可靠的舊格式相容方式）
     if case_url:
-        for f in notice_dir.glob("*google.txt"):
+        norm_url = case_url.split("?")[0].rstrip("/")  # 忽略 query string 比對
+        for f in sorted(notice_dir.glob("*google.txt"), reverse=True):  # 最新的優先
             try:
-                if case_url in f.read_text(encoding="utf-8", errors="ignore"):
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if case_url in text or norm_url in text:
                     return f
             except Exception:
                 pass
+
+    # 3. domain fallback（舊案件相容）
+    hits = list(notice_dir.glob(f"*_{domain_safe}_google.txt"))
+    if hits:
+        return sorted(hits)[-1]  # 最新的
+
+    hits = [f for f in notice_dir.glob("*google.txt") if domain_safe in f.name]
+    if hits:
+        return sorted(hits)[-1]
 
     return None
 
@@ -190,8 +203,8 @@ def add_case():
                     path = notices_dir / f"{today}_{safe}_cloudflare.txt"
                     path.write_text(generate_cloudflare(url, inv["domain"], film_title))
 
-            # Google DMCA 永遠生成（搜尋流量最重要）
-            path = notices_dir / f"{today}_{safe}_google.txt"
+            # Google DMCA：用 case_id 命名，避免同 domain 多案件互相覆蓋
+            path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
             path.write_text(generate_google_checklist(url, film_title))
 
             # 自動寄出 email notices
@@ -368,7 +381,7 @@ def add_bulk():
                     if inv["is_cloudflare"]:
                         path = notices_dir / f"{today}_{safe}_cloudflare.txt"
                         path.write_text(generate_cloudflare(url, inv["domain"], film_title))
-                path = notices_dir / f"{today}_{safe}_google.txt"
+                path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
                 path.write_text(generate_google_checklist(url, film_title))
                 subprocess.run([sys.executable, "mailer.py", "--auto-send"],
                     capture_output=True, text=True, cwd=str(Path(__file__).parent))
