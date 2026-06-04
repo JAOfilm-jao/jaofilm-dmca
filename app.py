@@ -253,10 +253,14 @@ def fill_google(case_id):
             for u in notice_urls if u in submitted
         ]
         if conflicts:
+            # 回傳結構化資料供前端自動同步 report ID
+            structured = [
+                {"url": u, "existing_case_id": submitted[u][0], "report_id": submitted[u][1]}
+                for u in notice_urls if u in submitted
+            ]
             return jsonify({
                 "error": "duplicate_google",
-                "message": "以下 URL 已有 Google 檢舉記錄，不重複送出",
-                "urls": conflicts,
+                "conflicts": structured,
             }), 409
     except Exception as e:
         print(f"[fill-google] pre-check 例外（跳過）: {e}")
@@ -266,6 +270,22 @@ def fill_google(case_id):
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/set-google-report/<int:case_id>", methods=["POST"])
+def set_google_report(case_id):
+    """手動設定 google_report_id（重複偵測時同步現有 report ID 用）"""
+    data      = request.get_json(force=True)
+    report_id = (data.get("report_id") or "").strip()
+    if not report_id:
+        return jsonify({"error": "report_id 不能為空"}), 400
+    tracker.set_google_report_id(case_id, report_id)
+    notes_add = f" | Google report ID 同步自重複偵測 {date.today().isoformat()}"
+    rows = tracker.list_all()
+    case = next((r for r in rows if r["id"] == case_id), None)
+    if case:
+        tracker.update(case_id, case["status"], (case["notes"] or "") + notes_add)
+    return jsonify({"ok": True})
 
 
 @app.route("/send-pending/<int:case_id>", methods=["POST"])

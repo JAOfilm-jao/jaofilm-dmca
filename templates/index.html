@@ -362,7 +362,29 @@ async function checkAll(btn) {
 async function fillGoogle(caseId) {
   const r = await fetch(`/fill-google/${caseId}`, { method: "POST" });
   const d = await r.json();
-  if (d.error) { alert(d.error); return; }
+
+  // ── 重複偵測：自動同步 report ID，移至處理中 ──────────────────────────
+  if (d.error === "duplicate_google" && d.conflicts && d.conflicts.length) {
+    const c = d.conflicts[0];
+    showCaseNotice(caseId,
+      `⚠️ 已有 Google 檢舉（case #${c.existing_case_id}，report ${c.report_id}）`,
+      "orange"
+    );
+    // 自動同步 report ID → 案件移出「需要你操作」
+    await fetch(`/set-google-report/${caseId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_id: c.report_id })
+    });
+    setTimeout(() => location.reload(), 1500);
+    return;
+  }
+
+  if (d.error) {
+    showCaseNotice(caseId, "❌ " + d.error, "red");
+    return;
+  }
+
   const btn = document.getElementById(`fill-btn-${caseId}`);
   if (btn) btn.textContent = "⏳ 等待提交...";
   // 輪詢直到 google_report_id 出現（最多 5 分鐘）
@@ -383,6 +405,22 @@ async function fillGoogle(caseId) {
       }
     } catch(e) {}
   }
+}
+
+function showCaseNotice(caseId, msg, color) {
+  const row = document.getElementById(`fill-btn-${caseId}`)
+    ?.closest(".case") || document.querySelector(`[data-id="${caseId}"]`);
+  if (!row) return;
+  let notice = row.querySelector(".dup-notice");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "dup-notice";
+    notice.style.cssText = "font-size:12px;padding:4px 8px;border-radius:4px;margin-top:4px;grid-column:1/-1";
+    row.appendChild(notice);
+  }
+  notice.style.background = color === "orange" ? "#7a4a00" : "#6a0000";
+  notice.style.color = "#fff";
+  notice.textContent = msg;
 }
 
 function toggleBulk() {
