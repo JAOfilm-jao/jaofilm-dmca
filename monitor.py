@@ -164,6 +164,8 @@ Link to authorized work: {WEBSITE}
 4. Contact Information:
 JAOfilm
 {CONTACT_EMAIL}
++1 267 551 0981
+Taipei, Taiwan
 
 5. Good Faith Statement:
 I have a good faith belief that the use of the material in the manner complained of isn't authorized by the copyright owner, its agent, or the law.
