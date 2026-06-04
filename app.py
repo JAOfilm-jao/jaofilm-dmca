@@ -139,6 +139,14 @@ def add_case():
     if not url:
         return jsonify({"error": "URL 不能為空"}), 400
 
+    # 重複 URL 檢查
+    existing = next((r for r in tracker.list_all() if r["url"] == url), None)
+    if existing:
+        return jsonify({
+            "error": f"⚠️ 此 URL 已存在（案件 #{existing['id']}，狀態：{existing['status']}）",
+            "duplicate": True, "case_id": existing["id"]
+        }), 409
+
     # 檢查是否合法來源
     from urllib.parse import urlparse
     domain = urlparse(url).netloc.lower().lstrip("www.")
@@ -277,8 +285,14 @@ def add_bulk():
         return jsonify({"error": "沒有 URL"}), 400
 
     def process_all():
+        all_cases = tracker.list_all()
+        existing_urls = {r["url"] for r in all_cases}
         for url in urls:
             try:
+                if url in existing_urls:
+                    dup = next(r for r in all_cases if r["url"] == url)
+                    print(f"[bulk skip] #{dup['id']} 重複 URL: {url[:60]}")
+                    continue
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc.lower().lstrip("www.")
                 if any(s in domain for s in LEGITIMATE_SOURCES):
