@@ -1,0 +1,39 @@
+Subject: DMCA Takedown Notice – Cloudflare-Proxied Infringement at boyfriendtv.com
+
+June 04, 2026
+
+To: Cloudflare Trust & Safety
+abuse@cloudflare.com
+
+RE: DMCA Takedown Notice – Copyright Infringement
+
+---
+I am the copyright owner of the audiovisual work described below. The domain boyfriendtv.com is distributing my copyrighted content without authorization and appears to be using Cloudflare's proxy/CDN services.
+
+I am requesting that Cloudflare terminate its services (proxy, CDN, and any caching) to this infringing website pursuant to the DMCA (17 U.S.C. § 512).
+
+COPYRIGHT OWNER:
+  JAO / JAOfilm
+  info@jaofilm.com
+  https://jaofilm.com
+
+COPYRIGHTED WORK:
+  Title:        JAOfilm series
+  Owner:        JAO / JAOfilm
+  Official URL: https://jaofilm.com/films/
+
+INFRINGING CONTENT:
+  https://www.boyfriendtv.com/es/videos/1083613/jaofilm-01/
+The website at boyfriendtv.com is hosting/streaming my copyrighted film "JAOfilm series" without my authorization. I have not licensed this content to boyfriendtv.com or any of its operators.
+
+I have a good faith belief that the use of the copyrighted material described above is not authorized by the copyright owner, its agent, or the law.
+
+I declare under penalty of perjury that the information in this notification is accurate and that I am the copyright owner, or am authorized to act on behalf of the copyright owner.
+
+Sincerely,
+
+JAO
+JAOfilm
+info@jaofilm.com
+https://jaofilm.com
+Date: June 04, 2026
