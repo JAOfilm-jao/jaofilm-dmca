@@ -1,8 +1,26 @@
 import sqlite3
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 DB = str(Path(__file__).parent / "tracker.db")
+
+# UTM 及追蹤參數白名單（這些不影響頁面內容，比對時忽略）
+_TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ref", "referrer", "fbclid", "gclid", "mc_cid", "mc_eid",
+}
+
+def normalize_url(url: str) -> str:
+    """移除 UTM / 追蹤參數，回傳正規化 URL 供重複比對用"""
+    try:
+        p = urlparse(url)
+        qs = {k: v for k, v in parse_qs(p.query, keep_blank_values=True).items()
+              if k.lower() not in _TRACKING_PARAMS}
+        clean = p._replace(query=urlencode(qs, doseq=True))
+        return urlunparse(clean).rstrip("/")
+    except Exception:
+        return url.rstrip("/")
 
 def _conn():
     conn = sqlite3.connect(DB)
@@ -96,14 +114,23 @@ def set_google_report_id(case_id, report_id):
         )
 
 def get_google_submitted_urls():
-    """回傳所有已送 Google DMCA 的 URL → {url: (case_id, report_id)}"""
+    """
+    回傳所有已送 Google DMCA 的 URL → {url: (case_id, report_id)}
+    同時收錄原始 URL 和正規化 URL（去除 UTM 參數），確保 UTM 不同的同一頁面也能被偵測。
+    """
     init()
     with _conn() as conn:
         rows = conn.execute(
             "SELECT id, url, google_report_id FROM cases "
             "WHERE google_report_id IS NOT NULL AND google_report_id != ''"
         ).fetchall()
-    return {r["url"]: (r["id"], r["google_report_id"]) for r in rows}
+    result = {}
+    for r in rows:
+        result[r["url"]] = (r["id"], r["google_report_id"])
+        norm = normalize_url(r["url"])
+        if norm != r["url"]:
+            result[norm] = (r["id"], r["google_report_id"])
+    return result
 
 def list_all(status=None):
     init()

@@ -139,8 +139,13 @@ def add_case():
     if not url:
         return jsonify({"error": "URL 不能為空"}), 400
 
-    # 重複 URL 檢查
-    existing = next((r for r in tracker.list_all() if r["url"] == url), None)
+    # 重複 URL 檢查（含 UTM 正規化：同一頁面不同追蹤參數視為重複）
+    norm_url = tracker.normalize_url(url)
+    existing = next(
+        (r for r in tracker.list_all()
+         if r["url"] == url or tracker.normalize_url(r["url"]) == norm_url),
+        None
+    )
     if existing:
         return jsonify({
             "error": f"⚠️ 此 URL 已存在（案件 #{existing['id']}，狀態：{existing['status']}）",
@@ -325,11 +330,16 @@ def add_bulk():
 
     def process_all():
         all_cases = tracker.list_all()
-        existing_urls = {r["url"] for r in all_cases}
+        existing_urls  = {r["url"] for r in all_cases}
+        existing_norms = {tracker.normalize_url(r["url"]): r for r in all_cases}
         for url in urls:
             try:
-                if url in existing_urls:
-                    dup = next(r for r in all_cases if r["url"] == url)
+                norm = tracker.normalize_url(url)
+                if url in existing_urls or norm in existing_norms:
+                    dup = next(
+                        (r for r in all_cases if r["url"] == url or tracker.normalize_url(r["url"]) == norm),
+                        None
+                    )
                     print(f"[bulk skip] #{dup['id']} 重複 URL: {url[:60]}")
                     continue
                 from urllib.parse import urlparse
