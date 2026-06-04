@@ -62,6 +62,22 @@ async def run(notice_path: str, case_id: str = None):
     data = parse_notice(notice_path)
     desc = f"{data['description']}. Title: {data['work_title']}"
 
+    # ── 重複 Google 送出防呆（第二道防線）────────────────────────────────────
+    try:
+        import tracker as _tracker
+        submitted  = _tracker.get_google_submitted_urls()
+        urls_check = data.get("infringing_urls") or [data["infringing_url"]]
+        conflicts  = [(u, submitted[u][0], submitted[u][1]) for u in urls_check if u in submitted]
+        if conflicts:
+            print(f"\n🚫  已中止：以下 URL 已有 Google 檢舉記錄，不重複送出")
+            for u, cid, rid in conflicts:
+                print(f"    case #{cid}  report {rid}")
+                print(f"    {u}")
+            print()
+            return
+    except Exception as e:
+        print(f"⚠️  pre-check 例外（繼續填表）: {e}")
+
     url_count = len(data.get('infringing_urls', [data['infringing_url']]))
     print(f"\n📄  {notice_path}")
     print(f"    片名: {data['work_title']}")

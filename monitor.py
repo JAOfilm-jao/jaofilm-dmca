@@ -101,6 +101,12 @@ def classify_email(sender: str, subject: str, body: str) -> str:
     sender_l = sender.lower()
     body_l   = body.lower()
 
+    # Google removals 重複送出警告
+    if "removals@google.com" in sender_l:
+        if "已提交過" in body or "previously submitted" in body_l:
+            return "google_duplicate"
+        return "cf_receipt"  # 其他 Google removals 信（移除確認等）
+
     # Cloudflare 信件
     if "cloudflare.com" in sender_l:
         if re.search(r"host for the reported domain is", body, re.I):
@@ -260,7 +266,7 @@ def scan_once(service, dry_run=False) -> dict:
     print(f"\n🔍  掃描 DMCA 信件... ({datetime.now().strftime('%H:%M:%S')})")
 
     # 掃所有 DMCA 相關信件（jao@ 和 info@ 都在同一個帳號，不限 to:）
-    query = "DMCA newer_than:60d -from:me"
+    query = "(DMCA OR from:removals@google.com) newer_than:60d -from:me"
     result = service.users().messages().list(userId="me", q=query, maxResults=50).execute()
     messages = result.get("messages", [])
 
@@ -283,6 +289,39 @@ def scan_once(service, dry_run=False) -> dict:
 
         print(f"\n  📨  [{kind}] {sender[:50]}")
         print(f"      Subject: {subject[:70]}")
+
+        # ── Google 重複送出警告 ────────────────────────────────────────────
+        if kind == "google_duplicate":
+            # 從 body 抓侵權 URL（Google 格式：「關於以下網址：https://...」）
+            url_m = re.search(r'關於以下網址：\s*(https?://\S+)', body)
+            if url_m:
+                dup_url = url_m.group(1).rstrip('。').rstrip(',')
+            else:
+                # fallback：body 裡第一個非 google.com 的 URL
+                for candidate in re.findall(r'https?://[^\s,）\)]+', body):
+                    if "google.com" not in candidate:
+                        dup_url = candidate.rstrip('。').rstrip(',')
+                        break
+                else:
+                    dup_url = None
+
+            if dup_url:
+                all_rows = tracker.list_all()
+                matched  = [r for r in all_rows if r["url"] == dup_url]
+                for case in matched:
+                    existing = case["notes"] or ""
+                    if "Google 重複警告" not in existing and not dry_run:
+                        tracker.update(
+                            case["id"], case["status"],
+                            existing + f" | Google 重複警告 {datetime.now().strftime('%Y-%m-%d')} — 勿再次送出"
+                        )
+                print(f"      ⚠️  Google 重複警告 → {dup_url[:70]}")
+            else:
+                print(f"      ⚠️  Google 重複警告（無法解析 URL）")
+
+            mark_processed(msg_id)
+            stats["processed"] += 1
+            continue
 
         # ── CF / 登記商收件確認：跳過 ─────────────────────────────────────
         if kind == "cf_receipt":

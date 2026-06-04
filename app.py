@@ -242,6 +242,25 @@ def fill_google(case_id):
     if not notice:
         return jsonify({"error": "找不到 Google notice 檔案"}), 404
 
+    # ── 重複 Google 送出防呆 ──────────────────────────────────────────────────
+    try:
+        from google_dmca import parse_notice as _parse_notice
+        notice_data = _parse_notice(str(notice))
+        notice_urls = notice_data.get("infringing_urls") or [notice_data.get("infringing_url")]
+        submitted   = tracker.get_google_submitted_urls()
+        conflicts   = [
+            f"case #{submitted[u][0]} report {submitted[u][1]}: {u}"
+            for u in notice_urls if u in submitted
+        ]
+        if conflicts:
+            return jsonify({
+                "error": "duplicate_google",
+                "message": "以下 URL 已有 Google 檢舉記錄，不重複送出",
+                "urls": conflicts,
+            }), 409
+    except Exception as e:
+        print(f"[fill-google] pre-check 例外（跳過）: {e}")
+
     subprocess.Popen(
         ["/opt/homebrew/bin/python3.11", "google_dmca.py", str(notice), str(case_id)],
         cwd=str(Path(__file__).parent)

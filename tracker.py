@@ -95,6 +95,16 @@ def set_google_report_id(case_id, report_id):
             (report_id, case_id)
         )
 
+def get_google_submitted_urls():
+    """回傳所有已送 Google DMCA 的 URL → {url: (case_id, report_id)}"""
+    init()
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, url, google_report_id FROM cases "
+            "WHERE google_report_id IS NOT NULL AND google_report_id != ''"
+        ).fetchall()
+    return {r["url"]: (r["id"], r["google_report_id"]) for r in rows}
+
 def list_all(status=None):
     init()
     with _conn() as conn:
