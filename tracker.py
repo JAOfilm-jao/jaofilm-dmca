@@ -1,3 +1,4 @@
+import json as _json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -55,15 +56,18 @@ def init():
             conn.execute("ALTER TABLE cases ADD COLUMN google_report_id TEXT")
         if "pending_action" not in cols:
             conn.execute("ALTER TABLE cases ADD COLUMN pending_action TEXT")
+        if "extra_urls" not in cols:
+            conn.execute("ALTER TABLE cases ADD COLUMN extra_urls TEXT")
 
-def add(url, film_title, inv):
+def add(url, film_title, inv, extra_urls=None):
     init()
+    extra_json = _json.dumps(extra_urls) if extra_urls else None
     with _conn() as conn:
         cur = conn.execute("""
             INSERT INTO cases
               (url, domain, film_title, ip, hosting_org, hosting_country,
-               is_cloudflare, platform, abuse_emails, status, date_found)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               is_cloudflare, platform, abuse_emails, status, date_found, extra_urls)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             url,
             inv.get("domain"),
@@ -76,8 +80,27 @@ def add(url, film_title, inv):
             ", ".join(inv.get("abuse_emails", [])),
             "pending",
             date.today().isoformat(),
+            extra_json,
         ))
         return cur.lastrowid
+
+def set_extra_urls(case_id, urls):
+    """存額外侵權 URL 清單（不含主 URL）"""
+    init()
+    with _conn() as conn:
+        conn.execute("UPDATE cases SET extra_urls=? WHERE id=?",
+                     (_json.dumps(urls), case_id))
+
+def get_all_urls(row) -> list:
+    """回傳該案件全部 URL（主 URL + extra_urls）"""
+    urls = [row["url"]]
+    if row["extra_urls"]:
+        try:
+            extras = _json.loads(row["extra_urls"])
+            urls += [u for u in extras if u != row["url"]]
+        except Exception:
+            pass
+    return urls
 
 def update(case_id, status, notes=None):
     init()

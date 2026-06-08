@@ -408,77 +408,114 @@ def google_dmca_reported():
     return jsonify({"ok": True, "report_id": report_id})
 
 
+def _ping_url(url: str) -> int:
+    """回傳 HTTP status code；連線失敗回傳負數"""
+    import requests as _req
+    try:
+        resp = _req.get(
+            url, timeout=12, allow_redirects=True,
+            headers={"User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            )},
+            verify=True,
+        )
+        return resp.status_code
+    except _req.exceptions.SSLError:
+        return -1
+    except _req.exceptions.Timeout:
+        return -2
+    except _req.exceptions.ConnectionError:
+        return -3
+    except Exception:
+        return -9
+
+def _code_to_verdict(code: int):
+    """(verdict, label) from HTTP status code"""
+    if code == 404:
+        return "removed", "404 — 已刪除"
+    if code == 410:
+        return "removed", "410 — 永久移除"
+    if code == 200:
+        return "up", "200 — 仍在線"
+    if code in (301, 302, 307, 308):
+        return "up", f"{code} — 重新導向（仍活著）"
+    if code == 403:
+        return "unknown", "403 — 拒絕存取（無法確認）"
+    if code == -1:
+        return "unknown", "SSL 錯誤（無法確認）"
+    if code == -2:
+        return "unknown", "連線逾時（無法確認）"
+    if code == -3:
+        return "check", "連線拒絕（可能下架，請手動確認）"
+    return "unknown", f"HTTP {code}（無法確認）"
+
+def _get_extra_urls_from_notice(case_id: int, domain: str) -> list:
+    """從 notice 檔案解析 extra URLs（DB 無記錄時的 fallback）"""
+    import re as _re
+    notices_dir = Path(__file__).parent / "notices"
+    domain_safe = (domain or "").replace(".", "_")
+    # 優先找 case-ID 命名的檔案
+    candidates = list(notices_dir.glob(f"*_c{case_id}_google.txt"))
+    if not candidates:
+        candidates = list(notices_dir.glob(f"*_{domain_safe}_google.txt"))
+    if not candidates:
+        return []
+    text = candidates[0].read_text(encoding="utf-8", errors="ignore")
+    urls = _re.findall(r'https?://\S+', text)
+    return [u.rstrip('.,;\n') for u in urls
+            if "google.com" not in u.lower() and "support.google" not in u.lower()]
+
 @app.route("/check-all", methods=["POST"])
 def check_all():
-    """ping 所有 submitted 案件，回傳結果讓使用者確認後再標記"""
-    import requests
+    """ping 所有 submitted 案件的全部 URL（主 URL + extra_urls），回傳結果"""
     rows = tracker.list_all()
     results = []
 
     for r in rows:
         if r["status"] not in ("submitted", "pending"):
             continue
-        url    = r["url"]
         domain = r["domain"] or ""
 
-        try:
-            resp = requests.get(
-                url, timeout=12, allow_redirects=True,
-                headers={"User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                )},
-                verify=True,
-            )
-            code = resp.status_code
-        except requests.exceptions.SSLError:
-            code = -1   # SSL 錯誤，不代表下架
-        except requests.exceptions.Timeout:
-            code = -2   # 超時，不代表下架
-        except requests.exceptions.ConnectionError:
-            code = -3   # 連線拒絕，可能下架
-        except Exception:
-            code = -9   # 其他未知錯誤
+        # 收集全部 URL（DB extra_urls → fallback 解析 notice 檔案）
+        all_urls = tracker.get_all_urls(r)
+        if len(all_urls) == 1:
+            extras_from_notice = _get_extra_urls_from_notice(r["id"], domain)
+            if extras_from_notice:
+                # 寫入 DB 供下次使用
+                extras_new = [u for u in extras_from_notice if u != r["url"]]
+                if extras_new and not r["extra_urls"]:
+                    tracker.set_extra_urls(r["id"], extras_new)
+                all_urls = list(dict.fromkeys([r["url"]] + extras_from_notice))
 
-        # 判斷邏輯：只有明確 HTTP 404/410 才自動確認下架
-        if code == 404:
-            verdict = "removed"
-            label   = "404 — 影片已刪除"
-        elif code == 410:
-            verdict = "removed"
-            label   = "410 — 永久移除"
-        elif code == 200:
-            verdict = "up"
-            label   = "200 — 仍在線"
-        elif code in (301, 302, 307, 308):
-            verdict = "up"
-            label   = f"{code} — 重新導向（仍活著）"
-        elif code == 403:
-            verdict = "unknown"
-            label   = "403 — 拒絕存取（無法確認）"
-        elif code == -1:
-            verdict = "unknown"
-            label   = "SSL 錯誤（無法確認，需手動查）"
-        elif code == -2:
-            verdict = "unknown"
-            label   = "連線逾時（無法確認，需手動查）"
-        elif code == -3:
-            verdict = "check"
-            label   = "連線拒絕（可能下架，請手動確認）"
-        else:
-            verdict = "unknown"
-            label   = f"HTTP {code}（無法確認）"
+        # 逐一 ping
+        url_results = []
+        for u in all_urls:
+            code = _ping_url(u)
+            v, lbl = _code_to_verdict(code)
+            url_results.append((u, code, v, lbl))
 
-        # 只有 404/410 才自動更新 tracker，其餘讓使用者決定
+        # 主 URL 決定整體 verdict（其餘 URL 僅統計）
+        primary_code    = next((code for u, code, v, lbl in url_results if u == r["url"]), -9)
+        verdict, label  = _code_to_verdict(primary_code)
+
+        n_total = len(url_results)
+        n_down  = sum(1 for _, _, v, _ in url_results if v == "removed")
+
+        if n_total > 1:
+            label = f"{label}（{n_down}/{n_total} URL 已下線）"
+
+        # 只有主 URL 404/410 才自動標記 removed
         if verdict == "removed":
             tracker.update(r["id"], "removed",
                            f"自動偵測 {label} ({date.today().isoformat()})")
-            _notify("JAOfilm DMCA ✅", f"{domain} 已確認下架（{label}）")
+            _notify("JAOfilm DMCA ✅", f"{domain} 已確認下架（{n_down}/{n_total}）")
 
         results.append({
-            "id": r["id"], "domain": domain, "url": url,
-            "code": code, "verdict": verdict, "label": label,
+            "id": r["id"], "domain": domain, "url": r["url"],
+            "code": primary_code, "verdict": verdict, "label": label,
+            "n_total": n_total, "n_down": n_down,
         })
 
     confirmed = sum(1 for r in results if r["verdict"] == "removed")

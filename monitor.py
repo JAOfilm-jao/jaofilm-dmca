@@ -101,11 +101,18 @@ def classify_email(sender: str, subject: str, body: str) -> str:
     sender_l = sender.lower()
     body_l   = body.lower()
 
-    # Google removals 重複送出警告
+    # Google removals 信件
     if "removals@google.com" in sender_l:
         if "已提交過" in body or "previously submitted" in body_l:
             return "google_duplicate"
-        return "cf_receipt"  # 其他 Google removals 信（移除確認等）
+        # 移除確認：Google 搜尋已將 URL 從索引移除
+        if re.search(
+            r"we.ll remove these urls|remove these urls from our search results|"
+            r"remove the following urls|will be removed from our search",
+            body_l
+        ):
+            return "google_removed"
+        return "cf_receipt"  # 其他 Google 信（收件確認等）
 
     # Cloudflare 信件
     if "cloudflare.com" in sender_l:
@@ -318,6 +325,79 @@ def scan_once(service, dry_run=False) -> dict:
                 print(f"      ⚠️  Google 重複警告 → {dup_url[:70]}")
             else:
                 print(f"      ⚠️  Google 重複警告（無法解析 URL）")
+
+            mark_processed(msg_id)
+            stats["processed"] += 1
+            continue
+
+        # ── Google 搜尋移除確認：驗證每個 URL ─────────────────────────────
+        if kind == "google_removed":
+            # 從 body 抓所有非 Google URL
+            raw_urls = re.findall(r'https?://\S+', body)
+            infringing = [
+                u.rstrip('.,;)\n>') for u in raw_urls
+                if "google.com" not in u.lower()
+            ]
+
+            if not infringing:
+                print("      ⚠️  Google 移除確認信：無法解析侵權 URL")
+                mark_processed(msg_id)
+                stats["unknown"] += 1
+                continue
+
+            # 找對應案件（先 domain 比對，再 URL 直接命中）
+            case = find_case_by_email_body(sender, subject, body)
+            if not case:
+                all_rows = tracker.list_all()
+                for row in all_rows:
+                    if row["url"] in infringing:
+                        case = row
+                        break
+
+            if not case:
+                print(f"      ⚠️  找不到對應案件（sample: {infringing[0][:60]}）")
+                mark_processed(msg_id)
+                stats["unknown"] += 1
+                continue
+
+            print(f"      案件 #{case['id']} {case['domain']}")
+            print(f"      Google 確認移除 {len(infringing)} 個 URL，逐一驗證...")
+
+            # 同步 extra_urls 至 DB（若尚未存入）
+            if not case["extra_urls"] and not dry_run:
+                extras = [u for u in infringing if u != case["url"]]
+                if extras:
+                    tracker.set_extra_urls(case["id"], extras)
+                    print(f"      📝  extra_urls 已寫入 DB（{len(extras)} 個）")
+
+            # 同步 google_report_id（從 subject 解析，若尚未記錄）
+            rid_m = re.search(r'\[(\d+-\d+)\]', subject)
+            if rid_m and not case["google_report_id"] and not dry_run:
+                tracker.set_google_report_id(case["id"], rid_m.group(1))
+
+            # 逐一 ping 每個 URL
+            n_down = sum(1 for u in infringing if verify_url_down(u))
+            primary_down = verify_url_down(case["url"])
+
+            if primary_down:
+                note = (
+                    f"Google 搜尋移除確認 {len(infringing)} URL，"
+                    f"實際驗證 {n_down}/{len(infringing)} 已下線 ({datetime.now().strftime('%Y-%m-%d')})"
+                )
+                print(f"      ✅  主 URL 已下線 → 標記 removed（{n_down}/{len(infringing)} 驗證通過）")
+                if not dry_run:
+                    tracker.update(case["id"], "removed", note)
+                stats["removed"] += 1
+            else:
+                existing = case["notes"] or ""
+                note = (
+                    f"Google 搜尋已除索 {len(infringing)} URL，"
+                    f"但主 URL 仍可存取 {n_down}/{len(infringing)} 已下線 ({datetime.now().strftime('%Y-%m-%d')})"
+                )
+                print(f"      ⚠️  主 URL 仍存在（{n_down}/{len(infringing)} 下線），記備註")
+                if not dry_run:
+                    tracker.update(case["id"], case["status"], existing + " | " + note)
+                stats["unknown"] += 1
 
             mark_processed(msg_id)
             stats["processed"] += 1
