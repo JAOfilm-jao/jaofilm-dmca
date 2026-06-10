@@ -93,17 +93,18 @@ def next_action(case):
         if is_twitter and not case.get("twitter_report_id"):
             return {"type": "human", "label": "Twitter/X DMCA 表單待送出", "color": "red"}
 
-        # 已有 google_report_id 欄位，或 notes 裡含任意格式的 Google 檢舉 ID
-        google_submitted = (
-            bool(case.get("google_report_id"))
-            or bool(re.search(r'\b\d+-\d{7,}\b', notes))
-            or "google dmca submitted" in notes.lower()
-        )
-        if not google_submitted:
-            google_notice = _find_google_notice(case)
-            if google_notice:
-                return {"type": "human", "label": "Google DMCA 表單待送出", "color": "red",
-                        "notice": str(google_notice)}
+        # Twitter/X 案件不需要 Google DMCA（刪貼後 URL 自然失效）
+        if not is_twitter:
+            google_submitted = (
+                bool(case.get("google_report_id"))
+                or bool(re.search(r'\b\d+-\d{7,}\b', notes))
+                or "google dmca submitted" in notes.lower()
+            )
+            if not google_submitted:
+                google_notice = _find_google_notice(case)
+                if google_notice:
+                    return {"type": "human", "label": "Google DMCA 表單待送出", "color": "red",
+                            "notice": str(google_notice)}
         # Razorblade 補件模式
         if "補件" in notes or "razorblade" in notes.lower() or "missing" in notes.lower():
             return {"type": "human", "label": "主機商要求補件", "color": "red"}
@@ -241,9 +242,11 @@ def add_case():
                     path = notices_dir / f"{today}_{safe}_cloudflare.txt"
                     path.write_text(generate_cloudflare(url, inv["domain"], film_title))
 
-            # Google DMCA：用 case_id 命名，避免同 domain 多案件互相覆蓋
-            path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
-            path.write_text(generate_google_checklist(url, film_title))
+            # Google DMCA：Twitter/X 平台不需要（刪貼後 URL 自然失效）
+            platform_name = (inv.get("platform") or {}).get("name", "") if inv.get("platform") else ""
+            if platform_name.lower() not in ("twitter/x", "twitter", "x"):
+                path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
+                path.write_text(generate_google_checklist(url, film_title))
 
             # 自動寄出 email notices
             subprocess.run(
@@ -513,8 +516,11 @@ def add_bulk():
                     if inv["is_cloudflare"]:
                         path = notices_dir / f"{today}_{safe}_cloudflare.txt"
                         path.write_text(generate_cloudflare(url, inv["domain"], film_title))
-                path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
-                path.write_text(generate_google_checklist(url, film_title))
+                # Twitter/X 平台不需要 Google DMCA notice
+                platform_name = (inv.get("platform") or {}).get("name", "") if inv.get("platform") else ""
+                if platform_name.lower() not in ("twitter/x", "twitter", "x"):
+                    path = notices_dir / f"{today}_{safe}_c{case_id}_google.txt"
+                    path.write_text(generate_google_checklist(url, film_title))
                 subprocess.run([sys.executable, "mailer.py", "--auto-send"],
                     capture_output=True, text=True, cwd=str(Path(__file__).parent))
                 tracker.update(case_id, "submitted",
