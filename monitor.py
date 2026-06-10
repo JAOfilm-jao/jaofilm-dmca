@@ -125,11 +125,25 @@ def classify_email(sender: str, subject: str, body: str) -> str:
         if re.search(r"report received|thank you for contacting|this inbox is not monitored", body_l):
             return "cf_receipt"
 
-    # X/Twitter 補件請求
+    # X/Twitter 信件
     if "legal-support@x.com" in sender_l or "legal-support@twitter.com" in sender_l:
         if re.search(r"please submit the following information|electronic signature", body_l):
             return "x_supplement"
-        return "cf_receipt"  # 其他 X 自動確認
+        # 下架確認（線上表單 DMCA 被接受後的回信）
+        if re.search(
+            r"removed|disabled|taken down|actioned|complied with|removed the content|"
+            r"we have acted|content.*removed|has been suspended",
+            body_l
+        ):
+            return "x_removed"
+        # 拒絕
+        if re.search(
+            r"not find a violation|no violation|unable to action|does not violate|"
+            r"not a copyright|counter.?notice|not constitute",
+            body_l
+        ):
+            return "x_denied"
+        return "cf_receipt"  # 收件確認，跳過
 
     # 移除確認
     for sig in REMOVAL_SIGNALS:
@@ -273,7 +287,7 @@ def scan_once(service, dry_run=False) -> dict:
     print(f"\n🔍  掃描 DMCA 信件... ({datetime.now().strftime('%H:%M:%S')})")
 
     # 掃所有 DMCA 相關信件（jao@ 和 info@ 都在同一個帳號，不限 to:）
-    query = "(DMCA OR from:removals@google.com) newer_than:60d -from:me"
+    query = "(DMCA OR from:removals@google.com OR from:legal-support@x.com OR from:legal-support@twitter.com) newer_than:60d -from:me"
     result = service.users().messages().list(userId="me", q=query, maxResults=50).execute()
     messages = result.get("messages", [])
 
@@ -444,6 +458,71 @@ def scan_once(service, dry_run=False) -> dict:
                     print(f"      ✅  新建 case #{new_id} 並存入草稿")
 
             mark_processed(msg_id)
+            stats["processed"] += 1
+            continue
+
+        # ── X/Twitter 下架確認 ────────────────────────────────────────────
+        if kind == "x_removed":
+            ticket_m  = re.search(r'(LEGAL-\d+)', subject)
+            ticket_id = ticket_m.group(1) if ticket_m else None
+            case = None
+            if ticket_id:
+                for row in tracker.list_all():
+                    if dict(row).get("twitter_report_id") == ticket_id:
+                        case = row
+                        break
+            if not case:
+                case = find_case_by_email_body(sender, subject, body)
+
+            if not case:
+                print(f"      ⚠️  X 下架確認找不到對應案件 (ticket={ticket_id})")
+                mark_processed(msg_id)
+                stats["unknown"] += 1
+                continue
+
+            url = case["url"]
+            print(f"      案件 #{case['id']} {case['domain']} (ticket={ticket_id})")
+            print(f"      Ping URL: {url[:70]}")
+
+            is_down = verify_url_down(url)
+            if is_down:
+                print(f"      ✅  URL 已下線，標記 removed")
+                if not dry_run:
+                    tracker.update(case["id"], "removed",
+                                   f"X/Twitter 確認下架 {datetime.now().strftime('%Y-%m-%d %H:%M')} ticket={ticket_id or 'unknown'}")
+                stats["removed"] += 1
+            else:
+                print(f"      ⚠️  URL 仍可存取，記備註等人工確認")
+                if not dry_run:
+                    existing = case["notes"] or ""
+                    tracker.update(case["id"], case["status"],
+                                   existing + f" | X 聲稱已處理但 URL 仍存在 {datetime.now().strftime('%Y-%m-%d')} ticket={ticket_id or 'unknown'}")
+                stats["unknown"] += 1
+
+            mark_processed(msg_id)
+            stats["processed"] += 1
+            continue
+
+        # ── X/Twitter 拒絕 ────────────────────────────────────────────────
+        if kind == "x_denied":
+            ticket_m  = re.search(r'(LEGAL-\d+)', subject)
+            ticket_id = ticket_m.group(1) if ticket_m else None
+            case = None
+            if ticket_id:
+                for row in tracker.list_all():
+                    if dict(row).get("twitter_report_id") == ticket_id:
+                        case = row
+                        break
+            if not case:
+                case = find_case_by_email_body(sender, subject, body)
+
+            if case and not dry_run:
+                existing = case["notes"] or ""
+                tracker.update(case["id"], case["status"],
+                               existing + f" | X 拒絕處理 {datetime.now().strftime('%Y-%m-%d')} ticket={ticket_id or 'unknown'}")
+            print(f"      ℹ️  X 拒絕，已記錄備註 (ticket={ticket_id})")
+            mark_processed(msg_id)
+            stats["denied"] += 1
             stats["processed"] += 1
             continue
 
