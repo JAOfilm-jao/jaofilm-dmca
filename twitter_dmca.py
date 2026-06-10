@@ -211,37 +211,70 @@ async def run(cases: list):
         print(f"  {'✅' if ok else '⚠️ '} Link to original work: {COPYRIGHT_URL}")
 
         # ── 多個侵權 URL ─────────────────────────────────────────────────────
-        async def click_add_another_url():
-            """點擊「Add another URL」按鈕，回傳是否成功"""
-            clicked = await page.evaluate("""() => {
+        async def fill_infringing_url(index, url):
+            """
+            index=0：直接填第一個欄位
+            index>0：先點「Add another link」等新欄位出現，再填最後一個欄位
+            """
+            if index == 0:
+                ok = await fill_by_name("Infringing_Urls__c[0].value", url)
+                return ok
+
+            # 記錄目前 Infringing URL 欄位數量
+            count_before = await page.evaluate("""() =>
+                document.querySelectorAll('[name*="Infringing_Urls__c"]').length
+            """)
+
+            # 點「Add another link / Add another URL / ...」
+            btn_text = await page.evaluate("""() => {
                 const all = [
                     ...document.querySelectorAll('button'),
                     ...document.querySelectorAll('[role="button"]'),
                 ];
                 for (const btn of all) {
-                    const text = (btn.textContent || '').trim().toLowerCase();
-                    if (text.includes('add another') || text.includes('add url') ||
-                        text.includes('add link') || text === 'add' || text === '+') {
+                    const t = (btn.textContent || '').trim().toLowerCase();
+                    if (t.includes('add another') || t.includes('add link') ||
+                        t.includes('add url') || t === '+') {
                         btn.click();
                         return btn.textContent.trim();
                     }
                 }
                 return null;
             }""")
-            return clicked
+
+            if not btn_text:
+                print(f"  ⚠️  找不到「Add another」按鈕（index {index}）")
+                return False
+
+            # 等待新欄位出現（最多 3 秒）
+            for _ in range(15):
+                await page.wait_for_timeout(200)
+                count_now = await page.evaluate("""() =>
+                    document.querySelectorAll('[name*="Infringing_Urls__c"]').length
+                """)
+                if count_now > count_before:
+                    break
+
+            print(f"  ✅ 點擊「{btn_text}」")
+
+            # 填最後一個（剛新增的）欄位
+            result = await page.evaluate("""(val) => {
+                const els = document.querySelectorAll('[name*="Infringing_Urls__c"]');
+                if (!els.length) return false;
+                const el = els[els.length - 1];
+                el.focus();
+                const proto = window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                if (setter) setter.call(el, val); else el.value = val;
+                el.dispatchEvent(new Event('input',  {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                el.blur();
+                return true;
+            }""", url)
+            return bool(result)
 
         for i, c in enumerate(cases):
-            if i > 0:
-                # 點「Add another URL」然後等新欄位出現
-                btn_text = await click_add_another_url()
-                if btn_text:
-                    await page.wait_for_timeout(600)
-                    print(f"  ✅ 點擊「{btn_text}」新增第 {i+1} 個 URL 欄位")
-                else:
-                    print(f"  ⚠️  找不到「Add another URL」按鈕，嘗試直接填 index {i}")
-
-            field = f"Infringing_Urls__c[{i}].value"
-            ok = await fill_by_name(field, c["url"])
+            ok = await fill_infringing_url(i, c["url"])
             print(f"  {'✅' if ok else '⚠️ '} Infringing URL [{i}]: {c['url'][:70]}")
 
         # Describe infringement
