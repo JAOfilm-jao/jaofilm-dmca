@@ -86,6 +86,12 @@ def next_action(case):
 
     if status == "submitted":
         days = (date.today() - date.fromisoformat(case["date_submitted"] or date.today().isoformat())).days
+
+        # Twitter/X 平台：優先檢查線上表單是否送出
+        is_twitter = (case.get("platform") or "").lower() in ("twitter/x", "twitter", "x")
+        if is_twitter and not case.get("twitter_report_id"):
+            return {"type": "human", "label": "Twitter/X DMCA 表單待送出", "color": "red"}
+
         # 已有 google_report_id 欄位，或 notes 裡含任意格式的 Google 檢舉 ID
         google_submitted = (
             bool(case.get("google_report_id"))
@@ -288,6 +294,57 @@ def fill_google(case_id):
         cwd=str(Path(__file__).parent)
     )
     return jsonify({"ok": True, "message": "已啟動 Google DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/fill-twitter/<int:case_id>", methods=["POST"])
+def fill_twitter(case_id):
+    """觸發 twitter_dmca.py 填表"""
+    rows = tracker.list_all()
+    _row = next((r for r in rows if r["id"] == case_id), None)
+    if not _row:
+        return jsonify({"error": "案件不存在"}), 404
+    case = dict(_row)
+
+    if case.get("twitter_report_id"):
+        return jsonify({
+            "error": "duplicate_twitter",
+            "report_id": case["twitter_report_id"],
+        }), 409
+
+    subprocess.Popen(
+        ["/opt/homebrew/bin/python3.11", "-u", "twitter_dmca.py",
+         str(case_id), case["url"], case["film_title"] or "JAOfilm series"],
+        cwd=str(Path(__file__).parent)
+    )
+    return jsonify({"ok": True, "message": "已啟動 Twitter/X DMCA 填表，請查看 Chrome"})
+
+
+@app.route("/set-twitter-report/<int:case_id>", methods=["POST"])
+def set_twitter_report(case_id):
+    """手動設定 twitter_report_id"""
+    data      = request.get_json(force=True)
+    report_id = (data.get("report_id") or "").strip()
+    if not report_id:
+        return jsonify({"error": "report_id 不能為空"}), 400
+    tracker.set_twitter_report_id(case_id, report_id)
+    rows = tracker.list_all()
+    case = next((r for r in rows if r["id"] == case_id), None)
+    if case:
+        notes_add = f" | Twitter/X DMCA submitted {date.today().isoformat()}"
+        tracker.update(case_id, case["status"], (case["notes"] or "") + notes_add)
+    return jsonify({"ok": True})
+
+
+@app.route("/twitter-dmca-reported", methods=["POST"])
+def twitter_dmca_reported():
+    """twitter_dmca.py 自動回報案件編號"""
+    data = request.get_json(force=True)
+    case_id   = data.get("case_id")
+    report_id = data.get("report_id")
+    if not case_id or not report_id:
+        return jsonify({"error": "缺少 case_id 或 report_id"}), 400
+    tracker.set_twitter_report_id(int(case_id), report_id)
+    return jsonify({"ok": True, "report_id": report_id})
 
 
 @app.route("/set-google-report/<int:case_id>", methods=["POST"])

@@ -58,6 +58,8 @@ def init():
             conn.execute("ALTER TABLE cases ADD COLUMN pending_action TEXT")
         if "extra_urls" not in cols:
             conn.execute("ALTER TABLE cases ADD COLUMN extra_urls TEXT")
+        if "twitter_report_id" not in cols:
+            conn.execute("ALTER TABLE cases ADD COLUMN twitter_report_id TEXT")
 
 def add(url, film_title, inv, extra_urls=None):
     init()
@@ -135,6 +137,30 @@ def set_google_report_id(case_id, report_id):
             "UPDATE cases SET google_report_id=? WHERE id=?",
             (report_id, case_id)
         )
+
+def set_twitter_report_id(case_id, report_id):
+    init()
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cases SET twitter_report_id=? WHERE id=?",
+            (report_id, case_id)
+        )
+
+def get_twitter_submitted_urls():
+    """回傳所有已送 Twitter/X DMCA 的 URL → {url: (case_id, report_id)}"""
+    init()
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, url, twitter_report_id FROM cases "
+            "WHERE twitter_report_id IS NOT NULL AND twitter_report_id != ''"
+        ).fetchall()
+    result = {}
+    for r in rows:
+        result[r["url"]] = (r["id"], r["twitter_report_id"])
+        norm = normalize_url(r["url"])
+        if norm != r["url"]:
+            result[norm] = (r["id"], r["twitter_report_id"])
+    return result
 
 def get_google_submitted_urls():
     """

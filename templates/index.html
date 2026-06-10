@@ -74,7 +74,10 @@
   .btn.grey:hover { background: #444; }
   .btn.red-btn { background: #cc2200; }
   .btn.green-btn { background: #2a7a2a; }
+  .btn.twitter-btn { background: #1a1a1a; border: 1px solid #555; }
+  .btn.twitter-btn:hover { background: #2a2a2a; }
   .google-id { font-size: 11px; color: #aaa; margin-left: 6px; vertical-align: middle; white-space: nowrap; }
+  .twitter-id { font-size: 11px; color: #aaa; margin-left: 6px; vertical-align: middle; white-space: nowrap; }
   .msg { margin-top: 10px; font-size: 12px; color: #888; min-height: 16px; }
 
   /* Sections */
@@ -227,6 +230,13 @@
         <div class="case-btns">
           {% if c.pending_action %}
           <button class="btn red-btn" onclick="sendPending({{ c.id }}, this)">✉ 確認送出</button>
+          {% endif %}
+          {% if 'Twitter' in c.action.label or 'X DMCA' in c.action.label %}
+          <button class="btn twitter-btn" onclick="fillTwitter({{ c.id }})" id="tw-btn-{{ c.id }}">🐦 X 填表</button>
+          <button class="btn grey" onclick="setTwitterManual({{ c.id }})" style="font-size:11px;padding:6px 10px">手動輸入 ID</button>
+          {% if c.twitter_report_id %}
+          <span class="twitter-id" title="Twitter/X 案件編號">🔖 {{ c.twitter_report_id }}</span>
+          {% endif %}
           {% endif %}
           {% if 'Google' in c.action.label %}
           <button class="btn" onclick="fillGoogle({{ c.id }})" id="fill-btn-{{ c.id }}">填表</button>
@@ -464,6 +474,66 @@ async function sendPending(caseId, btn) {
     btn.textContent = "❌ 失敗";
     btn.disabled = false;
     alert(d.error);
+  }
+}
+
+async function fillTwitter(caseId) {
+  const btn = document.getElementById(`tw-btn-${caseId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 開啟中..."; }
+
+  const r = await fetch(`/fill-twitter/${caseId}`, { method: "POST" });
+  const d = await r.json();
+
+  if (d.error === "duplicate_twitter") {
+    showCaseNotice(caseId, `⚠️ 已有 Twitter 記錄（${d.report_id}）`, "orange");
+    if (btn) { btn.disabled = false; btn.textContent = "🐦 X 填表"; }
+    return;
+  }
+  if (d.error) {
+    showCaseNotice(caseId, "❌ " + d.error, "red");
+    if (btn) { btn.disabled = false; btn.textContent = "🐦 X 填表"; }
+    return;
+  }
+
+  if (btn) btn.textContent = "⏳ 等待提交...";
+  // 輪詢 twitter_report_id（最多 5 分鐘）
+  for (let i = 0; i < 150; i++) {
+    await new Promise(res => setTimeout(res, 2000));
+    try {
+      const res = await fetch("/api/cases");
+      const cases = await res.json();
+      const c = cases.find(x => x.id === caseId);
+      if (c && c.twitter_report_id) {
+        if (btn) { btn.textContent = "✅ 已提交"; btn.disabled = false; }
+        const span = document.createElement("span");
+        span.className = "twitter-id";
+        span.title = "Twitter/X 案件編號";
+        span.textContent = "🔖 " + c.twitter_report_id;
+        btn.insertAdjacentElement("afterend", span);
+        setTimeout(() => location.reload(), 2000);
+        break;
+      }
+    } catch(e) {}
+  }
+  if (btn && btn.textContent === "⏳ 等待提交...") {
+    btn.textContent = "🐦 X 填表";
+    btn.disabled = false;
+  }
+}
+
+async function setTwitterManual(caseId) {
+  const id = prompt("輸入 Twitter/X 案件編號（或填 X-YYYYMMDD-submitted）：");
+  if (!id || !id.trim()) return;
+  const r = await fetch(`/set-twitter-report/${caseId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ report_id: id.trim() })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    setTimeout(() => location.reload(), 500);
+  } else {
+    alert("設定失敗：" + (d.error || "未知錯誤"));
   }
 }
 
