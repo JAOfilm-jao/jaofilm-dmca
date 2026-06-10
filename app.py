@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import json
+import uuid
 import subprocess
 from datetime import date, datetime
 from pathlib import Path
@@ -120,16 +121,47 @@ def next_action(case):
 
 
 def enrich_cases(rows):
-    cases = []
+    flat = []
     for r in rows:
         c = dict(r)
         c["action"] = next_action(c)
+        c["is_batch"] = False
         c["days_since"] = ""
         if c["date_found"]:
             days = (date.today() - date.fromisoformat(c["date_found"])).days
             c["days_since"] = f"{days}天前"
-        cases.append(c)
-    return cases
+        flat.append(c)
+
+    # 依 batch_id 群組；無 batch_id 的維持單筆
+    singles = [c for c in flat if not c.get("batch_id")]
+    batched: dict = {}
+    for c in flat:
+        if c.get("batch_id"):
+            batched.setdefault(c["batch_id"], []).append(c)
+
+    # 建立 batch group 物件
+    _priority = {"red": 0, "yellow": 1, "orange": 2, "green": 3, "grey": 4}
+    batch_groups = []
+    for bid, members in batched.items():
+        primary = min(members, key=lambda c: _priority.get(c["action"]["color"], 5))
+        group = {
+            "is_batch":        True,
+            "batch_id":        bid,
+            "domain":          members[0]["domain"],
+            "film_title":      members[0]["film_title"],
+            "days_since":      members[0]["days_since"],
+            "action":          primary["action"],
+            "batch_cases":     members,
+            # 以最急迫的 case 作為按鈕觸發 ID
+            "id":              primary["id"],
+            "twitter_report_id": primary.get("twitter_report_id"),
+            "google_report_id":  primary.get("google_report_id"),
+            "pending_action":    primary.get("pending_action"),
+            "url":             primary["url"],
+        }
+        batch_groups.append(group)
+
+    return singles + batch_groups
 
 # ── 路由 ──────────────────────────────────────────────────────────────────────
 
@@ -313,14 +345,17 @@ def fill_twitter(case_id):
             "report_id": trigger["twitter_report_id"],
         }), 409
 
-    # 收集所有待送 Twitter cases（含觸發的那個，以 case_id 排序）
+    # 收集待送 Twitter cases：若觸發 case 有 batch_id，只取同 batch；否則只取這一筆
+    trigger_batch = trigger.get("batch_id")
+
     def _is_pending_twitter(r):
         d = dict(r)
-        platform = (d.get("platform") or "").lower()
-        is_tw = platform in ("twitter/x", "twitter", "x")
+        platform  = (d.get("platform") or "").lower()
+        is_tw     = platform in ("twitter/x", "twitter", "x")
         status_ok = d.get("status") in ("submitted",)
         no_report = not d.get("twitter_report_id")
-        return is_tw and status_ok and no_report
+        same_batch = (d.get("batch_id") == trigger_batch) if trigger_batch else (d["id"] == case_id)
+        return is_tw and status_ok and no_report and same_batch
 
     pending = sorted(
         [dict(r) for r in rows if _is_pending_twitter(r)],
@@ -435,6 +470,9 @@ def add_bulk():
     if not urls:
         return jsonify({"error": "沒有 URL"}), 400
 
+    # 只有 > 1 個 URL 時才賦予 batch_id（單一 URL 不需要群組）
+    batch_id = f"b{date.today().strftime('%Y%m%d')}{uuid.uuid4().hex[:6]}" if len(urls) > 1 else None
+
     def process_all():
         all_cases = tracker.list_all()
         existing_urls  = {r["url"] for r in all_cases}
@@ -455,7 +493,7 @@ def add_bulk():
                     print(f"[bulk skip] {url} — 合法來源")
                     continue
                 inv     = investigate(url)
-                case_id = tracker.add(url, film_title, inv)
+                case_id = tracker.add(url, film_title, inv, batch_id=batch_id)
                 today   = date.today().strftime("%Y-%m-%d")
                 safe    = inv["domain"].replace(".", "_").replace("/", "_")
                 notices_dir = Path(__file__).parent / "notices"

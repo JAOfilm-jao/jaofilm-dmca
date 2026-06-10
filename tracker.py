@@ -60,16 +60,18 @@ def init():
             conn.execute("ALTER TABLE cases ADD COLUMN extra_urls TEXT")
         if "twitter_report_id" not in cols:
             conn.execute("ALTER TABLE cases ADD COLUMN twitter_report_id TEXT")
+        if "batch_id" not in cols:
+            conn.execute("ALTER TABLE cases ADD COLUMN batch_id TEXT")
 
-def add(url, film_title, inv, extra_urls=None):
+def add(url, film_title, inv, extra_urls=None, batch_id=None):
     init()
     extra_json = _json.dumps(extra_urls) if extra_urls else None
     with _conn() as conn:
         cur = conn.execute("""
             INSERT INTO cases
               (url, domain, film_title, ip, hosting_org, hosting_country,
-               is_cloudflare, platform, abuse_emails, status, date_found, extra_urls)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+               is_cloudflare, platform, abuse_emails, status, date_found, extra_urls, batch_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             url,
             inv.get("domain"),
@@ -83,6 +85,7 @@ def add(url, film_title, inv, extra_urls=None):
             "pending",
             date.today().isoformat(),
             extra_json,
+            batch_id,
         ))
         return cur.lastrowid
 
