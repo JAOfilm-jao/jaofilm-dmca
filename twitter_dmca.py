@@ -5,6 +5,10 @@ JAOfilm Twitter/X DMCA Playwright Filler
 填完停下，讓你手動按 Submit。
 
 用法：
+  python3 twitter_dmca.py '<JSON>'
+  JSON 格式：[{"id": 69, "url": "https://x.com/...", "title": "JAOfilm series"}, ...]
+
+舊式（單一，向下相容）：
   python3 twitter_dmca.py <case_id> <infringing_url> [<film_title>]
 
 前提：Chrome Debug Mode 開著（bash open_chrome_debug.sh）
@@ -32,35 +36,50 @@ COPYRIGHT_URL  = "https://jaofilm.com/films"
 FORM_URL       = "https://help.x.com/en/forms/ipi/dmca"
 
 
-async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm series"):
+async def run(cases: list):
+    """
+    cases: list of {"id": int, "url": str, "title": str}
+    """
     # ── 重複防呆 ─────────────────────────────────────────────────────────────
     try:
         import tracker as _tracker
         submitted = _tracker.get_twitter_submitted_urls()
-        if infringing_url in submitted:
-            cid, rid = submitted[infringing_url]
-            print(f"\n🚫 已中止：此 URL 已有 Twitter/X DMCA 記錄")
-            print(f"    case #{cid}  report {rid}")
-            print(f"    {infringing_url}\n")
-            return
+        filtered = []
+        for c in cases:
+            if c["url"] in submitted:
+                cid, rid = submitted[c["url"]]
+                print(f"🚫 跳過已送出 case #{c['id']}：{rid}  {c['url'][:60]}")
+            else:
+                filtered.append(c)
+        cases = filtered
     except Exception as e:
         print(f"⚠️  pre-check 例外（繼續填表）: {e}")
 
+    if not cases:
+        print("✅  所有 URL 均已送出，無需填表。")
+        return
+
+    # 使用第一個案件的標題作為描述基礎
+    primary = cases[0]
+    film_title = primary["title"]
+
     work_desc = (
-        f'"{film_title}" — original adult film by JAOfilm / CHIH WEI JAO. '
+        f'Original adult film(s) by JAOfilm / CHIH WEI JAO. '
         f"Exclusively distributed at jaofilm.com and authorized platforms. "
-        f"This post uploads or embeds the work without permission."
+        f"The listed posts upload or embed the work(s) without permission."
     )
     infringement_desc = (
-        f"The linked post on X (Twitter) contains or embeds an unauthorized copy of "
-        f'the copyrighted film "{film_title}" by JAOfilm. '
-        f"The original work is only available at jaofilm.com. "
+        f"The linked post(s) on X (Twitter) contain or embed unauthorized copies of "
+        f"copyrighted film(s) by JAOfilm. "
+        f"The original work(s) are only available at jaofilm.com. "
         f"No license has been granted to post or redistribute this content."
     )
 
-    print(f"\n🐦  Twitter/X DMCA 填表")
-    print(f"    案件 #{case_id}  |  {film_title}")
-    print(f"    侵權 URL: {infringing_url}")
+    ids_str = ", ".join(f"#{c['id']}" for c in cases)
+    print(f"\n🐦  Twitter/X DMCA 填表（{len(cases)} 個 URL）")
+    print(f"    案件 {ids_str}")
+    for c in cases:
+        print(f"    ▸ #{c['id']} {c['url'][:70]}")
     print(f"\n⚠️   填表中，請不要碰 Chrome\n")
 
     async with async_playwright() as p:
@@ -191,9 +210,39 @@ async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm seri
         ok = await fill_by_name("originalWork[0].value", COPYRIGHT_URL)
         print(f"  {'✅' if ok else '⚠️ '} Link to original work: {COPYRIGHT_URL}")
 
-        # Infringing URL（X/Twitter 上的侵權連結）
-        ok = await fill_by_name("Infringing_Urls__c[0].value", infringing_url)
-        print(f"  {'✅' if ok else '⚠️ '} Infringing URL: {infringing_url[:70]}")
+        # ── 多個侵權 URL ─────────────────────────────────────────────────────
+        async def click_add_another_url():
+            """點擊「Add another URL」按鈕，回傳是否成功"""
+            clicked = await page.evaluate("""() => {
+                const all = [
+                    ...document.querySelectorAll('button'),
+                    ...document.querySelectorAll('[role="button"]'),
+                ];
+                for (const btn of all) {
+                    const text = (btn.textContent || '').trim().toLowerCase();
+                    if (text.includes('add another') || text.includes('add url') ||
+                        text.includes('add link') || text === 'add' || text === '+') {
+                        btn.click();
+                        return btn.textContent.trim();
+                    }
+                }
+                return null;
+            }""")
+            return clicked
+
+        for i, c in enumerate(cases):
+            if i > 0:
+                # 點「Add another URL」然後等新欄位出現
+                btn_text = await click_add_another_url()
+                if btn_text:
+                    await page.wait_for_timeout(600)
+                    print(f"  ✅ 點擊「{btn_text}」新增第 {i+1} 個 URL 欄位")
+                else:
+                    print(f"  ⚠️  找不到「Add another URL」按鈕，嘗試直接填 index {i}")
+
+            field = f"Infringing_Urls__c[{i}].value"
+            ok = await fill_by_name(field, c["url"])
+            print(f"  {'✅' if ok else '⚠️ '} Infringing URL [{i}]: {c['url'][:70]}")
 
         # Describe infringement
         ok = await fill_by_name("describeInfringement", infringement_desc)
@@ -216,19 +265,21 @@ async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm seri
 
         # ── 完成提示 ──────────────────────────────────────────────────────────
         print(f"\n{'='*60}")
-        print(f"✅  表單填完！請到 Chrome：")
+        print(f"✅  表單填完（{len(cases)} 個 URL）！請到 Chrome：")
         print(f"    1. 確認所有欄位正確")
         print(f"    2. 按下「Submit」按鈕送出")
         print(f"    系統將自動偵測送出並記錄（最多等 5 分鐘）。")
         print(f"{'='*60}\n")
 
         # ── [7] 輪詢成功頁 ────────────────────────────────────────────────────
-        print("⏳ [7/7] 等待你按 Submit（最多 5 分鐘）...")
+        case_ids  = [c["id"] for c in cases]
+        today_str = date.today().strftime("%Y%m%d")
+        print(f"⏳ [7/7] 等待你按 Submit（最多 5 分鐘）...")
         report_id = None
         for _ in range(150):
             await asyncio.sleep(2)
             try:
-                content = await page.evaluate("() => document.body.innerText")
+                content     = await page.evaluate("() => document.body.innerText")
                 current_url = page.url
 
                 is_success = (
@@ -243,7 +294,6 @@ async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm seri
                 )
 
                 if is_success:
-                    # 嘗試抓案件/參考編號
                     m = re.search(
                         r'(?:case|reference|report|ticket|request|confirmation)\s*'
                         r'(?:number|#|no\.?|id)[:\s#]*([A-Z0-9\-]{4,})',
@@ -251,19 +301,17 @@ async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm seri
                     )
                     if not m:
                         m = re.search(r'#([0-9]{5,})', content)
-                    if m:
-                        report_id = m.group(1)
-                    else:
-                        report_id = f"X-{date.today().strftime('%Y%m%d')}-submitted"
+                    report_id = m.group(1) if m else f"X-{today_str}-submitted"
                     print(f"\n🎉 偵測到成功頁面！")
                     break
             except Exception:
                 pass
 
+        ids_str = ",".join(str(x) for x in case_ids)
         if report_id:
-            print(f"   案件編號：{report_id}")
+            print(f"   案件編號：{report_id}  |  案件：{ids_str}")
             try:
-                payload = json.dumps({"case_id": case_id, "report_id": report_id}).encode()
+                payload = json.dumps({"case_ids": case_ids, "report_id": report_id}).encode()
                 req = urllib.request.Request(
                     "http://localhost:5002/twitter-dmca-reported",
                     data=payload,
@@ -271,23 +319,36 @@ async def run(case_id: str, infringing_url: str, film_title: str = "JAOfilm seri
                     method="POST"
                 )
                 urllib.request.urlopen(req, timeout=5)
-                print("✅  已自動更新到儀表板")
+                print(f"✅  已自動更新 {len(case_ids)} 個案件到儀表板")
             except Exception as e:
-                print(f"⚠️  回報失敗，手動指令：")
-                print(f"    curl -X POST http://localhost:5002/set-twitter-report/{case_id} "
-                      f"-H 'Content-Type: application/json' -d '{{\"report_id\":\"{report_id}\"}}'")
+                print(f"⚠️  回報失敗，手動指令（逐一執行）：")
+                for cid in case_ids:
+                    print(f"    curl -X POST http://localhost:5002/set-twitter-report/{cid} "
+                          f"-H 'Content-Type: application/json' -d '{{\"report_id\":\"{report_id}\"}}'")
         else:
-            today_str = date.today().strftime("%Y%m%d")
-            print("⚠️  5 分鐘內未偵測到成功頁，若已送出請手動更新：")
-            print(f"    curl -X POST http://localhost:5002/set-twitter-report/{case_id} "
-                  f"-H 'Content-Type: application/json' -d '{{\"report_id\":\"X-{today_str}-manual\"}}'")
+            print(f"⚠️  5 分鐘內未偵測到成功頁，若已送出請手動更新：")
+            for cid in case_ids:
+                print(f"    curl -X POST http://localhost:5002/set-twitter-report/{cid} "
+                      f"-H 'Content-Type: application/json' -d '{{\"report_id\":\"X-{today_str}-manual\"}}'")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("用法：python3 twitter_dmca.py <case_id> <infringing_url> [<film_title>]")
+    if len(sys.argv) < 2:
+        print("用法：python3 twitter_dmca.py '<JSON cases>'")
         sys.exit(1)
-    _case_id  = sys.argv[1]
-    _url      = sys.argv[2]
-    _film     = sys.argv[3] if len(sys.argv) >= 4 else "JAOfilm series"
-    asyncio.run(run(_case_id, _url, _film))
+
+    first_arg = sys.argv[1]
+    # 嘗試解析 JSON（新格式）
+    try:
+        _cases = json.loads(first_arg)
+        if isinstance(_cases, dict):
+            _cases = [_cases]
+    except (json.JSONDecodeError, TypeError):
+        # 舊格式向下相容：python3 twitter_dmca.py <case_id> <url> [<title>]
+        if len(sys.argv) < 3:
+            print("用法：python3 twitter_dmca.py '<JSON cases>'")
+            sys.exit(1)
+        _cases = [{"id": sys.argv[1], "url": sys.argv[2],
+                   "title": sys.argv[3] if len(sys.argv) >= 4 else "JAOfilm series"}]
+
+    asyncio.run(run(_cases))

@@ -298,25 +298,55 @@ def fill_google(case_id):
 
 @app.route("/fill-twitter/<int:case_id>", methods=["POST"])
 def fill_twitter(case_id):
-    """觸發 twitter_dmca.py 填表"""
+    """觸發 twitter_dmca.py 填表（自動合併所有待送 Twitter cases）"""
     rows = tracker.list_all()
+
+    # 找觸發的 case
     _row = next((r for r in rows if r["id"] == case_id), None)
     if not _row:
         return jsonify({"error": "案件不存在"}), 404
-    case = dict(_row)
+    trigger = dict(_row)
 
-    if case.get("twitter_report_id"):
+    if trigger.get("twitter_report_id"):
         return jsonify({
             "error": "duplicate_twitter",
-            "report_id": case["twitter_report_id"],
+            "report_id": trigger["twitter_report_id"],
         }), 409
+
+    # 收集所有待送 Twitter cases（含觸發的那個，以 case_id 排序）
+    def _is_pending_twitter(r):
+        d = dict(r)
+        platform = (d.get("platform") or "").lower()
+        is_tw = platform in ("twitter/x", "twitter", "x")
+        status_ok = d.get("status") in ("submitted",)
+        no_report = not d.get("twitter_report_id")
+        return is_tw and status_ok and no_report
+
+    pending = sorted(
+        [dict(r) for r in rows if _is_pending_twitter(r)],
+        key=lambda x: x["id"]
+    )
+
+    if not pending:
+        pending = [trigger]
+
+    cases_payload = [
+        {"id": c["id"], "url": c["url"], "title": c["film_title"] or "JAOfilm series"}
+        for c in pending
+    ]
 
     subprocess.Popen(
         ["/opt/homebrew/bin/python3.11", "-u", "twitter_dmca.py",
-         str(case_id), case["url"], case["film_title"] or "JAOfilm series"],
+         json.dumps(cases_payload)],
         cwd=str(Path(__file__).parent)
     )
-    return jsonify({"ok": True, "message": "已啟動 Twitter/X DMCA 填表，請查看 Chrome"})
+
+    urls_preview = ", ".join(f"#{c['id']}" for c in pending)
+    return jsonify({
+        "ok": True,
+        "message": f"已啟動 Twitter/X DMCA 填表，共 {len(pending)} 個案件（{urls_preview}），請查看 Chrome",
+        "case_count": len(pending),
+    })
 
 
 @app.route("/set-twitter-report/<int:case_id>", methods=["POST"])
@@ -337,14 +367,21 @@ def set_twitter_report(case_id):
 
 @app.route("/twitter-dmca-reported", methods=["POST"])
 def twitter_dmca_reported():
-    """twitter_dmca.py 自動回報案件編號"""
-    data = request.get_json(force=True)
-    case_id   = data.get("case_id")
+    """twitter_dmca.py 自動回報案件編號（支援單一 case_id 或多個 case_ids）"""
+    data      = request.get_json(force=True)
     report_id = data.get("report_id")
-    if not case_id or not report_id:
-        return jsonify({"error": "缺少 case_id 或 report_id"}), 400
-    tracker.set_twitter_report_id(int(case_id), report_id)
-    return jsonify({"ok": True, "report_id": report_id})
+    if not report_id:
+        return jsonify({"error": "缺少 report_id"}), 400
+
+    # 支援 case_ids（list）或舊版 case_id（單一）
+    case_ids = data.get("case_ids") or ([int(data["case_id"])] if data.get("case_id") else None)
+    if not case_ids:
+        return jsonify({"error": "缺少 case_id 或 case_ids"}), 400
+
+    for cid in case_ids:
+        tracker.set_twitter_report_id(int(cid), report_id)
+
+    return jsonify({"ok": True, "report_id": report_id, "updated": case_ids})
 
 
 @app.route("/set-google-report/<int:case_id>", methods=["POST"])
