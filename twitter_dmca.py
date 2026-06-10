@@ -225,16 +225,25 @@ async def run(cases: list):
                 document.querySelectorAll('[name*="Infringing_Urls__c"]').length
             """)
 
-            # 點「Add another link / Add another URL / ...」
+            # 頁面有兩個「Add another link」：一個在 original work，一個在 infringing material
+            # 必須找在最後一個 Infringing_Urls__c 欄位「之後」（DOM 順序）的那個
             btn_text = await page.evaluate("""() => {
-                const all = [
-                    ...document.querySelectorAll('button'),
-                    ...document.querySelectorAll('[role="button"]'),
-                ];
-                for (const btn of all) {
+                const inputs = document.querySelectorAll('[name*="Infringing_Urls__c"]');
+                if (!inputs.length) return null;
+                const lastInput = inputs[inputs.length - 1];
+
+                // 找所有符合「add another / add link」的按鈕
+                const candidates = Array.from(
+                    document.querySelectorAll('button, [role="button"]')
+                ).filter(btn => {
                     const t = (btn.textContent || '').trim().toLowerCase();
-                    if (t.includes('add another') || t.includes('add link') ||
-                        t.includes('add url') || t === '+') {
+                    return t.includes('add another') || t.includes('add link') || t.includes('add url');
+                });
+
+                // 選第一個在 lastInput 之後出現的（DOCUMENT_POSITION_FOLLOWING = 4）
+                for (const btn of candidates) {
+                    const pos = lastInput.compareDocumentPosition(btn);
+                    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) {
                         btn.click();
                         return btn.textContent.trim();
                     }
