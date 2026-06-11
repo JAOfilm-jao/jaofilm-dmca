@@ -21,6 +21,7 @@ import json
 import urllib.request
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from playwright.async_api import async_playwright
 
 # ── 固定申請人資料 ────────────────────────────────────────────────────────────
@@ -34,6 +35,20 @@ PHONE          = "+1 267 551 0981"
 COUNTRY_CODE   = "TW"
 COPYRIGHT_URL  = "https://jaofilm.com/films"
 FORM_URL       = "https://help.x.com/en/forms/ipi/dmca"
+
+# 送表前移除 Twitter 追蹤參數（?s=XX ?t=XX ?ref_src=XX 等），只保留 status ID
+_TWITTER_TRACKING_PARAMS = {"s", "t", "ref_src", "ref_url", "src", "cxt"}
+
+def clean_tweet_url(url: str) -> str:
+    """去掉 Twitter 追蹤參數，只保留 /status/ID 識別的部份。"""
+    try:
+        p = urlparse(url)
+        qs = parse_qs(p.query, keep_blank_values=True)
+        cleaned = {k: v for k, v in qs.items() if k.lower() not in _TWITTER_TRACKING_PARAMS}
+        new_query = urlencode(cleaned, doseq=True)
+        return urlunparse(p._replace(query=new_query))
+    except Exception:
+        return url
 
 
 async def run(cases: list):
@@ -61,16 +76,33 @@ async def run(cases: list):
 
     # 使用第一個案件的標題作為描述基礎
     primary = cases[0]
-    film_title = primary["title"]
+    film_title = primary.get("title") or "JAOfilm series"
+    # 每個 case 可帶 original_url 欄位指向具體影片頁；預設用總覽頁
+    original_url = primary.get("original_url") or COPYRIGHT_URL
 
-    work_desc = (
-        f'Original adult film(s) by JAOfilm / CHIH WEI JAO. '
-        f"Exclusively distributed at jaofilm.com and authorized platforms. "
-        f"The listed posts upload or embed the work(s) without permission."
-    )
+    # 清理所有 case URL（移除追蹤參數）
+    for c in cases:
+        c["url"] = clean_tweet_url(c["url"])
+
+    # 若 film_title 是泛稱，描述也保持通用；否則點名具體片名
+    is_generic = film_title.lower() in ("jaofilm series", "jaofilm", "")
+    if is_generic:
+        work_desc = (
+            "Original adult film(s) by JAOfilm / CHIH WEI JAO. "
+            "Exclusively distributed at jaofilm.com and authorized platforms. "
+            "The listed posts upload or embed the work(s) without permission."
+        )
+    else:
+        work_desc = (
+            f'Original adult film "{film_title}" by JAOfilm / CHIH WEI JAO. '
+            f"Exclusively distributed at jaofilm.com and authorized platforms. "
+            f"The listed post(s) upload or embed this work without authorization."
+        )
+
     infringement_desc = (
-        f"The linked post(s) on X (Twitter) contain or embed unauthorized copies of "
-        f"copyrighted film(s) by JAOfilm. "
+        f"The linked post(s) on X (Twitter) contain or embed unauthorized "
+        f"{'copies' if is_generic else f'copies of \"{film_title}\"'}"
+        f" — copyrighted film(s) by JAOfilm. "
         f"The original work(s) are only available at jaofilm.com. "
         f"No license has been granted to post or redistribute this content."
     )
@@ -206,9 +238,9 @@ async def run(cases: list):
         ok = await fill_by_name("DescriptionText", work_desc)
         print(f"  {'✅' if ok else '⚠️ '} Description of original work")
 
-        # Link(s) to the original work
-        ok = await fill_by_name("originalWork[0].value", COPYRIGHT_URL)
-        print(f"  {'✅' if ok else '⚠️ '} Link to original work: {COPYRIGHT_URL}")
+        # Link(s) to the original work（優先用具體影片頁，否則用總覽頁）
+        ok = await fill_by_name("originalWork[0].value", original_url)
+        print(f"  {'✅' if ok else '⚠️ '} Link to original work: {original_url}")
 
         # ── 多個侵權 URL ─────────────────────────────────────────────────────
         async def fill_infringing_url(index, url):

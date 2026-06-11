@@ -166,6 +166,19 @@ def enrich_cases(rows):
 
 # ── 路由 ──────────────────────────────────────────────────────────────────────
 
+@app.route("/films-data")
+def films_data():
+    """回傳 films.json 片單（供前端 dropdown 用）"""
+    import json as _json
+    films_path = Path(__file__).parent / "films.json"
+    if films_path.exists():
+        return app.response_class(
+            response=films_path.read_text(encoding="utf-8"),
+            mimetype="application/json"
+        )
+    return jsonify([])
+
+
 @app.route("/")
 def index():
     rows  = tracker.list_all()
@@ -187,6 +200,7 @@ def index():
 def add_case():
     url        = request.form.get("url", "").strip()
     film_title = request.form.get("film_title", "JAOfilm series").strip()
+    film_url   = request.form.get("film_url", "").strip() or None
 
     if not url:
         return jsonify({"error": "URL 不能為空"}), 400
@@ -214,7 +228,7 @@ def add_case():
     def do_investigate():
         try:
             inv = investigate(url)
-            case_id = tracker.add(url, film_title, inv)
+            case_id = tracker.add(url, film_title, inv, film_url=film_url)
 
             today = date.today().strftime("%Y-%m-%d")
             safe  = inv["domain"].replace(".", "_").replace("/", "_")
@@ -369,7 +383,12 @@ def fill_twitter(case_id):
         pending = [trigger]
 
     cases_payload = [
-        {"id": c["id"], "url": c["url"], "title": c["film_title"] or "JAOfilm series"}
+        {
+            "id": c["id"],
+            "url": c["url"],
+            "title": c["film_title"] or "JAOfilm series",
+            **({"original_url": c["film_url"]} if c.get("film_url") else {}),
+        }
         for c in pending
     ]
 
@@ -469,6 +488,7 @@ def add_bulk():
     data       = request.get_json(force=True)
     urls       = [u.strip() for u in (data.get("urls") or []) if u.strip()][:20]
     film_title = data.get("film_title", "JAOfilm series").strip() or "JAOfilm series"
+    film_url   = data.get("film_url", "").strip() or None
 
     if not urls:
         return jsonify({"error": "沒有 URL"}), 400
@@ -496,7 +516,7 @@ def add_bulk():
                     print(f"[bulk skip] {url} — 合法來源")
                     continue
                 inv     = investigate(url)
-                case_id = tracker.add(url, film_title, inv, batch_id=batch_id)
+                case_id = tracker.add(url, film_title, inv, batch_id=batch_id, film_url=film_url)
                 today   = date.today().strftime("%Y-%m-%d")
                 safe    = inv["domain"].replace(".", "_").replace("/", "_")
                 notices_dir = Path(__file__).parent / "notices"

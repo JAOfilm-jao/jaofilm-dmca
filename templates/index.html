@@ -249,7 +249,9 @@
     <h2>新增侵權連結</h2>
     <div class="form-row">
       <input type="url" id="url-input" placeholder="https://example.com/video/..." />
-      <input type="text" id="film-input" placeholder="影片名稱（選填）" style="max-width:200px" />
+      <select id="film-select" style="max-width:260px">
+        <option value="">載入片單中...</option>
+      </select>
       <button class="btn" onclick="addCase()">調查 + 申訴</button>
       <button class="btn grey" onclick="toggleBulk()" id="bulk-toggle-btn">批量送出 ▾</button>
     </div>
@@ -257,10 +259,17 @@
     <div id="bulk-panel" style="display:none;margin-top:10px">
       <textarea id="bulk-urls" placeholder="每行一個 URL（最多 20 個）&#10;https://example.com/video/1&#10;https://example.com/video/2" style="width:100%;height:100px;background:#1a1a1a;color:#eee;border:1px solid #444;border-radius:4px;padding:8px;font-size:13px;resize:vertical"></textarea>
       <div class="form-row" style="margin-top:6px">
-        <input type="text" id="bulk-film-input" placeholder="影片名稱（全部套用，選填）" style="max-width:220px" />
+        <select id="bulk-film-select" style="max-width:260px">
+          <option value="">選擇侵權影片（必選）</option>
+        </select>
         <button class="btn" onclick="addBulk()">批量調查 + 申訴</button>
       </div>
     </div>
+    <!-- 隱藏欄位（由 dropdown 自動填入） -->
+    <input type="hidden" id="film-input" />
+    <input type="hidden" id="film-url-input" />
+    <input type="hidden" id="bulk-film-input" />
+    <input type="hidden" id="bulk-film-url-input" />
     <div class="msg" id="add-msg"></div>
   </div>
 
@@ -467,21 +476,26 @@
 
 <script>
 async function addCase() {
-  const url   = document.getElementById("url-input").value.trim();
-  const film  = document.getElementById("film-input").value.trim();
-  const msg   = document.getElementById("add-msg");
+  const url     = document.getElementById("url-input").value.trim();
+  const film    = document.getElementById("film-input").value.trim();
+  const filmUrl = document.getElementById("film-url-input").value.trim();
+  const msg     = document.getElementById("add-msg");
   if (!url) { msg.textContent = "請輸入 URL"; return; }
+  if (!film) { msg.style.color="#ff9800"; msg.textContent = "請先選擇侵權影片"; return; }
   msg.textContent = "調查中...";
   const fd = new FormData();
   fd.append("url", url);
-  fd.append("film_title", film || "JAOfilm series");
+  fd.append("film_title", film);
+  if (filmUrl) fd.append("film_url", filmUrl);
   const r = await fetch("/add", { method: "POST", body: fd });
   const d = await r.json();
   if (d.ok) {
     msg.style.color = "#4caf50";
     msg.textContent = d.message;
     document.getElementById("url-input").value = "";
+    document.getElementById("film-select").value = "";
     document.getElementById("film-input").value = "";
+    document.getElementById("film-url-input").value = "";
     setTimeout(() => location.reload(), 3000);
   } else {
     msg.style.color = "#ff6b6b";
@@ -611,22 +625,30 @@ function toggleBulk() {
 }
 
 async function addBulk() {
-  const raw   = document.getElementById("bulk-urls").value;
-  const film  = document.getElementById("bulk-film-input").value.trim();
-  const msg   = document.getElementById("add-msg");
-  const urls  = raw.split("\n").map(u => u.trim()).filter(u => u.startsWith("http"));
+  const raw      = document.getElementById("bulk-urls").value;
+  const film     = document.getElementById("bulk-film-input").value.trim();
+  const filmUrl  = document.getElementById("bulk-film-url-input").value.trim();
+  const msg      = document.getElementById("add-msg");
+  const urls     = raw.split("\n").map(u => u.trim()).filter(u => u.startsWith("http"));
   if (!urls.length) { msg.textContent = "請輸入至少一個 URL"; return; }
+  if (!film) { msg.style.color="#ff9800"; msg.textContent = "請先選擇侵權影片（X DMCA 需要具體片名）"; return; }
+  msg.style.color = "#eee";
   msg.textContent = `送出 ${urls.length} 個 URL 中...`;
+  const body = { urls, film_title: film };
+  if (filmUrl) body.film_url = filmUrl;
   const r = await fetch("/add-bulk", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ urls, film_title: film || "JAOfilm series" })
+    body: JSON.stringify(body)
   });
   const d = await r.json();
   msg.style.color = d.ok ? "#4caf50" : "#ff6b6b";
   msg.textContent = d.message || d.error;
   if (d.ok) {
     document.getElementById("bulk-urls").value = "";
+    document.getElementById("bulk-film-select").value = "";
+    document.getElementById("bulk-film-input").value = "";
+    document.getElementById("bulk-film-url-input").value = "";
     setTimeout(() => location.reload(), 4000);
   }
 }
@@ -708,10 +730,63 @@ async function setTwitterManual(caseId) {
 }
 
 // Enter 送出
+// ── 片單 dropdown ──────────────────────────────────────────────
+let _films = [];
+
+function _seriesLabel(s) {
+  return s === "theboys" ? "TheBoys" : s === "original" ? "Original" : "Collections";
+}
+
+async function loadFilms() {
+  try {
+    const r = await fetch("/films-data");
+    _films = await r.json();
+
+    const groups = { original: [], theboys: [], collections: [] };
+    _films.forEach(f => {
+      const g = groups[f.series] || groups.collections;
+      g.push(f);
+    });
+
+    function buildSelect(sel, placeholder) {
+      sel.innerHTML = `<option value="">${placeholder}</option>`;
+      ["original", "theboys", "collections"].forEach(series => {
+        if (!groups[series].length) return;
+        const og = document.createElement("optgroup");
+        og.label = _seriesLabel(series);
+        groups[series].forEach(f => {
+          const opt = document.createElement("option");
+          opt.value = f.id;
+          opt.textContent = `${f.title}${f.year ? "  ("+f.year+")" : ""}`;
+          og.appendChild(opt);
+        });
+        sel.appendChild(og);
+      });
+    }
+
+    buildSelect(document.getElementById("film-select"), "選擇侵權影片（必選）");
+    buildSelect(document.getElementById("bulk-film-select"), "選擇侵權影片（必選）");
+
+    document.getElementById("film-select").addEventListener("change", function() {
+      const f = _films.find(x => x.id === this.value);
+      document.getElementById("film-input").value = f ? f.title : "";
+      document.getElementById("film-url-input").value = f ? f.url : "";
+    });
+    document.getElementById("bulk-film-select").addEventListener("change", function() {
+      const f = _films.find(x => x.id === this.value);
+      document.getElementById("bulk-film-input").value = f ? f.title : "";
+      document.getElementById("bulk-film-url-input").value = f ? f.url : "";
+    });
+  } catch(e) {
+    console.warn("films.json 載入失敗", e);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("url-input").addEventListener("keydown", e => {
     if (e.key === "Enter") addCase();
   });
+  loadFilms();
 });
 </script>
 </body>

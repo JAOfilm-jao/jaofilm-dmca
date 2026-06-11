@@ -1,0 +1,145 @@
+[
+  {
+    "id": "the-watcher",
+    "title": "The Watcher",
+    "series": "original",
+    "year": 2026,
+    "duration_min": null,
+    "location": "Taipei",
+    "cast": ["JAY JIE"],
+    "description": "A psychological game of voyeurism and boundaries. Just watching him is enough to pull you under.",
+    "url": "https://jaofilm.com/films/the-watcher"
+  },
+  {
+    "id": "burning-barcelona",
+    "title": "Burning Barcelona",
+    "series": "original",
+    "year": 2025,
+    "duration_min": 15,
+    "location": "Barcelona",
+    "cast": ["Jhonny Hakson", "Lechita Global"],
+    "description": "Two best friends in a sunlit Barcelona room find themselves unable to resist each other.",
+    "url": "https://jaofilm.com/films/burning-barcelona"
+  },
+  {
+    "id": "jaofilm-no-10",
+    "title": "JAOfilm No.10",
+    "series": "original",
+    "year": 2025,
+    "duration_min": 14,
+    "location": "Paris",
+    "cast": ["Anteo Chara", "Theo Kami"],
+    "description": "When the outside fades, the wild within awakens. Desire is primal, a raw instinct and a passion that draws them closer.",
+    "url": "https://jaofilm.com/films/jaofilm-no-10"
+  },
+  {
+    "id": "jaofilm-no-9",
+    "title": "JAOfilm No.9",
+    "series": "original",
+    "year": 2025,
+    "duration_min": 12,
+    "location": "Taipei",
+    "cast": ["KUJI", "YUKI"],
+    "description": "That sultry heat between friends and lovers, amid Taiwan's humid afternoons.",
+    "url": "https://jaofilm.com/films/jaofilm-no-9"
+  },
+  {
+    "id": "jaofilm-no-6",
+    "title": "JAOfilm No.6",
+    "series": "original",
+    "year": 2024,
+    "duration_min": 11,
+    "location": "Paris",
+    "cast": ["Maxime Andolini", "Anteo Chara"],
+    "description": "Two men meet at a Parisian outdoor café. One becomes attracted to the other and they relocate to a park.",
+    "url": "https://jaofilm.com/films/jaofilm-no-6"
+  },
+  {
+    "id": "theboys-no-11",
+    "title": "TheBoys No.11",
+    "series": "theboys",
+    "year": 2025,
+    "duration_min": 7,
+    "location": "Warsaw",
+    "cast": ["Andriu Storm"],
+    "description": "In a quiet apartment in Warsaw, a local barber sheds layers of reserve. Candid, sensual, unapologetically intimate.",
+    "url": "https://jaofilm.com/films/theboys-no-11"
+  },
+  {
+    "id": "theboys-no-10",
+    "title": "TheBoys No.10",
+    "series": "theboys",
+    "year": 2024,
+    "duration_min": 6,
+    "location": "Berlin",
+    "cast": ["ATHLETONX"],
+    "description": "A performer in a Berlin cruising park, enjoying attention under open sky.",
+    "url": "https://jaofilm.com/films/theboys-no-10"
+  },
+  {
+    "id": "theboys-no-9",
+    "title": "TheBoys No.9",
+    "series": "theboys",
+    "year": 2024,
+    "duration_min": 4,
+    "location": "Taipei",
+    "cast": ["Sammy"],
+    "description": "A portrait filmed during Pride in Taipei. Visiting from New York, he reveals quiet confidence and emotional honesty on camera.",
+    "url": "https://jaofilm.com/films/theboys-no-9"
+  },
+  {
+    "id": "theboys-no-8",
+    "title": "TheBoys No.8",
+    "series": "theboys",
+    "year": 2024,
+    "duration_min": 5,
+    "location": "Taipei",
+    "cast": ["TY"],
+    "description": "Following an eventful evening out, a Ukrainian visitor lingers in the afterglow of the previous night.",
+    "url": "https://jaofilm.com/films/theboys-no-8"
+  },
+  {
+    "id": "theboys-no-5",
+    "title": "TheBoys No.5",
+    "series": "theboys",
+    "year": 2023,
+    "duration_min": 2,
+    "location": "Taipei",
+    "cast": ["EVAN"],
+    "description": "An itch you need to scratch.",
+    "url": "https://jaofilm.com/films/theboys-no-5"
+  },
+  {
+    "id": "theboys-no-4",
+    "title": "TheBoys No.4",
+    "series": "theboys",
+    "year": 2023,
+    "duration_min": 3,
+    "location": "Taipei",
+    "cast": ["Wayne"],
+    "description": "Shy vulnerability and underlying pride. A man talks about himself with candor and unexpected playfulness.",
+    "url": "https://jaofilm.com/films/theboys-no-4"
+  },
+  {
+    "id": "theboys-no-2",
+    "title": "TheBoys No.2",
+    "series": "theboys",
+    "year": 2025,
+    "duration_min": 5,
+    "location": "Taipei",
+    "cast": ["ANDY"],
+    "description": "The air still thick with the scent of last night. Two bodies, same bed, morning light.",
+    "url": "https://jaofilm.com/films/theboys-no-2"
+  },
+  {
+    "id": "inappropriate-bts",
+    "title": "inappropriate BTS",
+    "series": "collections",
+    "year": 2022,
+    "duration_min": 13,
+    "location": "Taipei",
+    "cast": ["Bill"],
+    "description": "Behind-the-scenes of the Inappropriate photo book. An old cinema. A working office. A stairwell.",
+    "url": "https://jaofilm.com/films/inappropriate-bts"
+  }
+]
