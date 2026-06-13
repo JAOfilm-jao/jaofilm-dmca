@@ -263,59 +263,59 @@ async def run(cases: list):
         async def fill_infringing_url(index, url):
             """
             index=0：直接填第一個欄位
-            index>0：先點「Add another link」等新欄位出現，再填最後一個欄位
+            index>0：點「Add another link」→ 等新欄位確實出現 → 填入
             """
             if index == 0:
                 ok = await fill_by_name("Infringing_Urls__c[0].value", url)
                 return ok
 
-            # 記錄目前 Infringing URL 欄位數量
-            count_before = await page.evaluate("""() =>
-                document.querySelectorAll('[name*="Infringing_Urls__c"]').length
-            """)
+            # 記錄目前欄位數（期望新增後 +1）
+            count_before = await page.evaluate(
+                "() => document.querySelectorAll('[name*=\"Infringing_Urls__c\"]').length"
+            )
+            expected = count_before + 1
 
-            # 頁面有兩個「Add another link」：一個在 original work，一個在 infringing material
-            # 必須找在最後一個 Infringing_Urls__c 欄位「之後」（DOM 順序）的那個
-            btn_text = await page.evaluate("""() => {
+            # 點擊在最後一個 Infringing_Urls__c 欄位「之後」的 Add another link 按鈕
+            clicked = await page.evaluate("""() => {
                 const inputs = document.querySelectorAll('[name*="Infringing_Urls__c"]');
-                if (!inputs.length) return null;
+                if (!inputs.length) return false;
                 const lastInput = inputs[inputs.length - 1];
-
-                // 找所有符合「add another / add link」的按鈕
-                const candidates = Array.from(
-                    document.querySelectorAll('button, [role="button"]')
-                ).filter(btn => {
-                    const t = (btn.textContent || '').trim().toLowerCase();
-                    return t.includes('add another') || t.includes('add link') || t.includes('add url');
-                });
-
-                // 選第一個在 lastInput 之後出現的（DOCUMENT_POSITION_FOLLOWING = 4）
-                for (const btn of candidates) {
-                    const pos = lastInput.compareDocumentPosition(btn);
-                    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) {
-                        btn.click();
-                        return btn.textContent.trim();
+                const btns = Array.from(document.querySelectorAll('button, [role="button"]'))
+                    .filter(b => {
+                        const t = (b.textContent || '').trim().toLowerCase();
+                        return t.includes('add another') || t.includes('add link') || t.includes('add url');
+                    });
+                for (const b of btns) {
+                    if (lastInput.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                        b.click();
+                        return true;
                     }
                 }
-                return null;
+                return false;
             }""")
 
-            if not btn_text:
-                print(f"  ⚠️  找不到「Add another」按鈕（index {index}）")
+            if not clicked:
+                print(f"  ⚠️  找不到「Add another」按鈕（index {index}），跳過此 URL")
                 return False
 
-            # 等待新欄位出現（最多 3 秒）
-            for _ in range(15):
+            # 等待新欄位出現（最多 8 秒，每 200ms 檢查一次）
+            appeared = False
+            for _ in range(40):
                 await page.wait_for_timeout(200)
-                count_now = await page.evaluate("""() =>
-                    document.querySelectorAll('[name*="Infringing_Urls__c"]').length
-                """)
-                if count_now > count_before:
+                count_now = await page.evaluate(
+                    "() => document.querySelectorAll('[name*=\"Infringing_Urls__c\"]').length"
+                )
+                if count_now >= expected:
+                    appeared = True
                     break
 
-            print(f"  ✅ 點擊「{btn_text}」")
+            if not appeared:
+                print(f"  ⚠️  新欄位 {expected} 秒內未出現（index {index}），跳過此 URL")
+                return False
 
-            # 填最後一個（剛新增的）欄位
+            print(f"  ✅ Add another link 成功，填第 {expected} 個欄位")
+
+            # 填剛出現的最後一個欄位
             result = await page.evaluate("""(val) => {
                 const els = document.querySelectorAll('[name*="Infringing_Urls__c"]');
                 if (!els.length) return false;
@@ -333,7 +333,7 @@ async def run(cases: list):
 
         for i, c in enumerate(cases):
             ok = await fill_infringing_url(i, c["url"])
-            print(f"  {'✅' if ok else '⚠️ '} Infringing URL [{i}]: {c['url'][:70]}")
+            print(f"  {'✅' if ok else '⚠️ '} Infringing URL [{i+1}/{len(cases)}]: {c['url'][:70]}")
 
         # Describe infringement
         ok = await fill_by_name("describeInfringement", infringement_desc)

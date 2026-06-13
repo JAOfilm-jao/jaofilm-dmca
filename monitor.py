@@ -486,22 +486,13 @@ def scan_once(service, dry_run=False) -> dict:
 
             url = case["url"]
             print(f"      案件 #{case['id']} {case['domain']} (ticket={ticket_id})")
-            print(f"      Ping URL: {url[:70]}")
-
-            is_down = verify_url_down(url)
-            if is_down:
-                print(f"      ✅  URL 已下線，標記 removed")
-                if not dry_run:
-                    tracker.update(case["id"], "removed",
-                                   f"X/Twitter 確認下架 {datetime.now().strftime('%Y-%m-%d %H:%M')} ticket={ticket_id or 'unknown'}")
-                stats["removed"] += 1
-            else:
-                print(f"      ⚠️  URL 仍可存取，記備註等人工確認")
-                if not dry_run:
-                    existing = case["notes"] or ""
-                    tracker.update(case["id"], case["status"],
-                                   existing + f" | X 聲稱已處理但 URL 仍存在 {datetime.now().strftime('%Y-%m-%d')} ticket={ticket_id or 'unknown'}")
-                stats["unknown"] += 1
+            # Twitter/X SPA 無法用 curl 驗證，一律記備註待人工到儀表板確認
+            print(f"      ℹ️  Twitter URL 無法自動驗證，記備註待人工確認")
+            if not dry_run:
+                existing = case["notes"] or ""
+                tracker.update(case["id"], case["status"],
+                               existing + f" | ⚠️ X 來信聲稱已處理，請人工確認 URL 是否下架後按「✓ 已下架」{datetime.now().strftime('%Y-%m-%d')} ticket={ticket_id or 'unknown'}")
+            stats["unknown"] += 1
 
             mark_processed(msg_id)
             stats["processed"] += 1

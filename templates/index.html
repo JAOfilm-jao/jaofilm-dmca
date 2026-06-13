@@ -464,10 +464,8 @@
         <div class="case-action">{{ c.action.label }}</div>
         <a class="case-url" href="{{ c.url }}" target="_blank" rel="noopener" title="{{ c.url }}">🔗 查看頁面</a>
         <div class="case-days">{{ c.days_since }}</div>
-        {% if c.platform and c.platform|lower in ('twitter/x','twitter','x') %}
         <button class="btn grey" style="font-size:11px;padding:4px 10px;margin-left:6px"
           onclick="reopenCase({{ c.id }}, this)" title="URL 仍存在？重開此案件重新送表">↩ 重開</button>
-        {% endif %}
       </div>
       {% endif %}
       {% else %}

@@ -443,22 +443,22 @@ def twitter_dmca_reported():
 
 @app.route("/reopen/<int:case_id>", methods=["POST"])
 def reopen_case(case_id):
-    """重新開啟被誤標 removed 的案件（Twitter 404 誤判專用）"""
+    """重新開啟被誤標 removed 的案件，清除所有「已完成」標記讓流程重跑"""
     rows = tracker.list_all()
     case = next((dict(r) for r in rows if r["id"] == case_id), None)
     if not case:
         return jsonify({"error": "案件不存在"}), 404
-    note = (case.get("notes") or "") + f" | 手動重開 {date.today().isoformat()}（原標 removed 但 URL 仍存在）"
+    note = (case.get("notes") or "") + f" | 手動重開 {date.today().isoformat()}（重新送出）"
     tracker.update(case_id, "submitted", note)
-    # 清除 date_removed
     try:
         import sqlite3
         db_path = Path(__file__).parent / "tracker.db"
         con = sqlite3.connect(db_path)
-        con.execute("UPDATE cases SET date_removed=NULL WHERE id=?", (case_id,))
+        # 清除 date_removed + twitter_report_id，讓填表按鈕重新出現
+        con.execute("UPDATE cases SET date_removed=NULL, twitter_report_id=NULL WHERE id=?", (case_id,))
         con.commit(); con.close()
     except Exception as e:
-        print(f"[reopen] 清除 date_removed 失敗: {e}")
+        print(f"[reopen] DB 清除失敗: {e}")
     return jsonify({"ok": True, "new_status": "submitted"})
 
 
