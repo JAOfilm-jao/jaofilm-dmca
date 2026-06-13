@@ -464,6 +464,10 @@
         <div class="case-action">{{ c.action.label }}</div>
         <a class="case-url" href="{{ c.url }}" target="_blank" rel="noopener" title="{{ c.url }}">🔗 查看頁面</a>
         <div class="case-days">{{ c.days_since }}</div>
+        {% if c.platform and c.platform|lower in ('twitter/x','twitter','x') %}
+        <button class="btn grey" style="font-size:11px;padding:4px 10px;margin-left:6px"
+          onclick="reopenCase({{ c.id }}, this)" title="URL 仍存在？重開此案件重新送表">↩ 重開</button>
+        {% endif %}
       </div>
       {% endif %}
       {% else %}
@@ -779,6 +783,27 @@ async function loadFilms() {
     });
   } catch(e) {
     console.warn("films.json 載入失敗", e);
+  }
+}
+
+async function reopenCase(caseId, btn) {
+  if (!confirm("重開此案件？狀態將從「完成」改回「已提交」。")) return;
+  btn.disabled = true;
+  btn.textContent = "處理中…";
+  try {
+    const res = await fetch(`/reopen/${caseId}`, { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      location.reload();
+    } else {
+      alert("重開失敗：" + (data.error || "未知錯誤"));
+      btn.disabled = false;
+      btn.textContent = "↩ 重開";
+    }
+  } catch (e) {
+    alert("請求失敗：" + e);
+    btn.disabled = false;
+    btn.textContent = "↩ 重開";
   }
 }
 

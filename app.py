@@ -441,6 +441,27 @@ def twitter_dmca_reported():
     return jsonify({"ok": True, "report_id": report_id, "updated": case_ids})
 
 
+@app.route("/reopen/<int:case_id>", methods=["POST"])
+def reopen_case(case_id):
+    """重新開啟被誤標 removed 的案件（Twitter 404 誤判專用）"""
+    rows = tracker.list_all()
+    case = next((dict(r) for r in rows if r["id"] == case_id), None)
+    if not case:
+        return jsonify({"error": "案件不存在"}), 404
+    note = (case.get("notes") or "") + f" | 手動重開 {date.today().isoformat()}（原標 removed 但 URL 仍存在）"
+    tracker.update(case_id, "submitted", note)
+    # 清除 date_removed
+    try:
+        import sqlite3
+        db_path = Path(__file__).parent / "tracker.db"
+        con = sqlite3.connect(db_path)
+        con.execute("UPDATE cases SET date_removed=NULL WHERE id=?", (case_id,))
+        con.commit(); con.close()
+    except Exception as e:
+        print(f"[reopen] 清除 date_removed 失敗: {e}")
+    return jsonify({"ok": True, "new_status": "submitted"})
+
+
 @app.route("/set-google-report/<int:case_id>", methods=["POST"])
 def set_google_report(case_id):
     """手動設定 google_report_id（重複偵測時同步現有 report ID 用）"""

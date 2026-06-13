@@ -161,6 +161,10 @@ def classify_email(sender: str, subject: str, body: str) -> str:
 
 def verify_url_down(url: str) -> bool:
     """回傳 True 表示內容確認已移除（404/403/410/connection error）"""
+    # Twitter/X SPA 對未登入請求回 404，無法用 curl 判斷真實狀態
+    # 依賴 email 確認即可，不做 ping 驗證
+    if re.search(r'(x\.com|twitter\.com)/\w+/status/', url or ""):
+        return True
     try:
         resp = requests.get(url, timeout=15, allow_redirects=True,
                             headers={"User-Agent": "Mozilla/5.0"})
