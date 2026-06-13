@@ -25,10 +25,12 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from playwright.async_api import async_playwright
 
 # ── 固定申請人資料 ────────────────────────────────────────────────────────────
+# Chrome 必須以 @jaofilm_DMCA（dmca@jaofilm.com）登入，才能讓 email 欄位自動帶入
+# 正確的 domain（jaofilm.com）是推特確認版權所有人身分的關鍵
 FULL_NAME      = "CHIH WEI JAO"
 COMPANY        = "JAOfilm"
 JOB_TITLE      = "Film Director"
-EMAIL          = "info@jaofilm.com"
+EMAIL          = "dmca@jaofilm.com"   # @jaofilm_DMCA 帳號的 email（表單由 X 自動填入）
 STREET_ADDRESS = "Taipei"
 CITY           = "Taipei"
 PHONE          = "+1 267 551 0981"
@@ -84,28 +86,41 @@ async def run(cases: list):
     for c in cases:
         c["url"] = clean_tweet_url(c["url"])
 
-    # 若 film_title 是泛稱，描述也保持通用；否則點名具體片名
+    # 若 film_title 是泛稱，描述也保持通用；否則點名具體片名 + 官網頁面
     is_generic = film_title.lower() in ("jaofilm series", "jaofilm", "")
+    film_page  = original_url if original_url != COPYRIGHT_URL else None
+
     if is_generic:
         work_desc = (
-            "Original adult film(s) by JAOfilm / CHIH WEI JAO. "
-            "Exclusively distributed at jaofilm.com and authorized platforms. "
-            "The listed posts upload or embed the work(s) without permission."
+            "Original adult film(s) by JAOfilm / CHIH WEI JAO, "
+            "the sole copyright holder. "
+            "Exclusively distributed at jaofilm.com and authorized platforms only. "
+            "No license has been granted to any third party to post or redistribute this content."
         )
     else:
+        page_ref = f" — official page: {film_page}" if film_page else ""
         work_desc = (
-            f'Original adult film "{film_title}" by JAOfilm / CHIH WEI JAO. '
-            f"Exclusively distributed at jaofilm.com and authorized platforms. "
-            f"The listed post(s) upload or embed this work without authorization."
+            f'Original adult film "{film_title}" by JAOfilm / CHIH WEI JAO{page_ref}. '
+            f"I am the sole copyright holder and creator of this work. "
+            f"This film is exclusively distributed at jaofilm.com and authorized platforms. "
+            f"No license has been granted to any third party to post or redistribute this content."
         )
 
-    infringement_desc = (
-        f"The linked post(s) on X (Twitter) contain or embed unauthorized "
-        f"{'copies' if is_generic else f'copies of \"{film_title}\"'}"
-        f" — copyrighted film(s) by JAOfilm. "
-        f"The original work(s) are only available at jaofilm.com. "
-        f"No license has been granted to post or redistribute this content."
-    )
+    if is_generic:
+        infringement_desc = (
+            "The linked post(s) on X (Twitter) contain or embed copyrighted film content "
+            "created and owned solely by JAOfilm / CHIH WEI JAO. "
+            "The original works are only available through jaofilm.com and authorized platforms. "
+            "These posts have not been authorized or licensed."
+        )
+    else:
+        page_ref = f" The original film can be verified at: {film_page}" if film_page else ""
+        infringement_desc = (
+            f'The linked post(s) on X (Twitter) contain or embed "{film_title}", '
+            f"a copyrighted film created and owned solely by JAOfilm / CHIH WEI JAO.{page_ref} "
+            f"This work is exclusively available at jaofilm.com and authorized platforms. "
+            f"These posts have not been authorized or licensed by the copyright holder."
+        )
 
     ids_str = ", ".join(f"#{c['id']}" for c in cases)
     print(f"\n🐦  Twitter/X DMCA 填表（{len(cases)} 個 URL）")

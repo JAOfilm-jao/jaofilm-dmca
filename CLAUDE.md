@@ -78,17 +78,34 @@ tail -f ~/Projects/tools/jaofilm-dmca/logs/app.log
 
 ---
 
-## Chrome Debug Mode（Google DMCA 前置）
+## Chrome Debug Mode（Twitter/X + Google DMCA 前置）
 
 ```bash
 bash open_chrome_debug.sh
 # 驗證：curl -s http://127.0.0.1:9222/json/version
 ```
 
-- user-data-dir：`~/.jaofilm-dmca-chrome`（專用 profile，非預設）
+- **user-data-dir**：`~/.jaofilm-dmca-chrome`（獨立 profile，與主 Chrome 互不干擾）
 - CDP port：`http://127.0.0.1:9222`
-- 已登入 Google（jaochihwei@gmail.com）
+- **Twitter/X**：必須登入 **@jaofilm_DMCA**（dmca@jaofilm.com）
+  - Google 帳號可用 jaochihwei@gmail.com（dmca@ 是別名，同一帳號）
 - **必須在點「填表」前確認開著**
+
+### 首次設定（只需做一次）
+
+```bash
+bash open_chrome_debug.sh   # 開啟獨立 Chrome
+# → 在開啟的 Chrome 視窗：
+#   1. 前往 x.com → 登入 @jaofilm_DMCA
+#   2. 關閉 Chrome（登入狀態會保存在 ~/.jaofilm-dmca-chrome）
+# → 之後每次執行 open_chrome_debug.sh，@jaofilm_DMCA 就已登入
+```
+
+### 為何帳號是關鍵
+
+推特 DMCA 表單的 email 欄位由登入帳號自動帶入且鎖定。
+@jaofilm_DMCA 用 dmca@jaofilm.com 註冊 → email domain = jaofilm.com = 被侵權網站 domain → 推特確認版權所有人身分。
+（2026-06-12 實測：使用此帳號手動填表後隔天成功下架）
 
 ---
 
@@ -100,9 +117,9 @@ bash open_chrome_debug.sh
 | Last name | JAO |
 | Company | JAOfilm（品牌名，無需登記）|
 | Signature | CHIH WEI JAO（必須完全符合 First + Last）|
-| Email | info@jaofilm.com |
+| Email | dmca@jaofilm.com（由 @jaofilm_DMCA 帳號自動帶入，不需手動填）|
 | Country | Taiwan |
-| Copyright URL | https://jaofilm.com |
+| Copyright URL | https://jaofilm.com/films/{slug}（具體影片頁，從 films.json 帶入）|
 
 ---
 
