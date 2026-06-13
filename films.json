@@ -44,6 +44,17 @@
     "url": "https://jaofilm.com/films/jaofilm-no-9"
   },
   {
+    "id": "jaofilm-no-7",
+    "title": "JAOfilm No.7",
+    "series": "original",
+    "year": 2024,
+    "duration_min": null,
+    "location": "London",
+    "cast": ["JONZU", "CJ"],
+    "description": "London Tales: Secrets of the Forest After the Party. The forest party ended, but their bodies weren't done. Heat followed them, touches grew urgent.",
+    "url": "https://jaofilm.com/films/jaofilm-no-7"
+  },
+  {
     "id": "jaofilm-no-6",
     "title": "JAOfilm No.6",
     "series": "original",
@@ -53,6 +64,39 @@
     "cast": ["Maxime Andolini", "Anteo Chara"],
     "description": "Two men meet at a Parisian outdoor café. One becomes attracted to the other and they relocate to a park.",
     "url": "https://jaofilm.com/films/jaofilm-no-6"
+  },
+  {
+    "id": "jaofilm-no-5",
+    "title": "JAOfilm No.5",
+    "series": "original",
+    "year": 2024,
+    "duration_min": null,
+    "location": "Taipei",
+    "cast": ["PEISUKY", "PETE"],
+    "description": "The boy was enjoying the thrill of exposure in the apartment elevator. Suddenly, the doors opened, and a man in a suit stepped out.",
+    "url": "https://jaofilm.com/films/jaofilm-no-5"
+  },
+  {
+    "id": "jaofilm-no-4",
+    "title": "JAOfilm No.4",
+    "series": "original",
+    "year": 2022,
+    "duration_min": null,
+    "location": "Taipei",
+    "cast": ["ALEN", "ALEX"],
+    "description": "That drive home sealed it. He'd been watching, waiting for the cracks in his straight friend's restraint.",
+    "url": "https://jaofilm.com/films/jaofilm-no-4"
+  },
+  {
+    "id": "jaofilm-no-2",
+    "title": "JAOfilm No.2",
+    "series": "original",
+    "year": 2022,
+    "duration_min": null,
+    "location": "Taipei",
+    "cast": ["Andy", "Jason"],
+    "description": "\"I just broke up with my girlfriend… can I crash at your place?\" That's what the younger guy texted his college senior.",
+    "url": "https://jaofilm.com/films/jaofilm-no-2"
   },
   {
     "id": "theboys-no-11",
@@ -99,6 +143,17 @@
     "url": "https://jaofilm.com/films/theboys-no-8"
   },
   {
+    "id": "theboys-no-7",
+    "title": "TheBoys No.7",
+    "series": "theboys",
+    "year": 2024,
+    "duration_min": null,
+    "location": "Taipei",
+    "cast": ["STEVEN"],
+    "description": "",
+    "url": "https://jaofilm.com/films/theboys-no-7"
+  },
+  {
     "id": "theboys-no-5",
     "title": "TheBoys No.5",
     "series": "theboys",
@@ -121,6 +176,17 @@
     "url": "https://jaofilm.com/films/theboys-no-4"
   },
   {
+    "id": "theboys-no-3",
+    "title": "TheBoys No.3",
+    "series": "theboys",
+    "year": 2023,
+    "duration_min": null,
+    "location": "New York",
+    "cast": ["ELLIOT"],
+    "description": "",
+    "url": "https://jaofilm.com/films/theboys-no-3"
+  },
+  {
     "id": "theboys-no-2",
     "title": "TheBoys No.2",
     "series": "theboys",
@@ -130,6 +196,17 @@
     "cast": ["ANDY"],
     "description": "The air still thick with the scent of last night. Two bodies, same bed, morning light.",
     "url": "https://jaofilm.com/films/theboys-no-2"
+  },
+  {
+    "id": "theboys-no-3-bts",
+    "title": "TheBoys No.3 BTS",
+    "series": "theboys",
+    "year": 2023,
+    "duration_min": null,
+    "location": "New York",
+    "cast": ["ELLIOT"],
+    "description": "Behind-the-scenes of TheBoys No.3.",
+    "url": "https://jaofilm.com/films/theboys-no-3-bts"
   },
   {
     "id": "inappropriate-bts",
