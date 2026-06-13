@@ -31,9 +31,9 @@ FULL_NAME      = "CHIH WEI JAO"
 COMPANY        = "JAOfilm"
 JOB_TITLE      = "Film Director"
 EMAIL          = "dmca@jaofilm.com"   # @jaofilm_DMCA 帳號的 email（表單由 X 自動填入）
-STREET_ADDRESS = "Taipei"
+STREET_ADDRESS = "Ln 150 4F Sec 1 Xinsheng S Rd"
 CITY           = "Taipei"
-PHONE          = "+1 267 551 0981"
+PHONE          = ""                   # 不填電話（成功表單為空）
 COUNTRY_CODE   = "TW"
 COPYRIGHT_URL  = "https://jaofilm.com/films"
 FORM_URL       = "https://help.x.com/en/forms/ipi/dmca"
@@ -86,40 +86,39 @@ async def run(cases: list):
     for c in cases:
         c["url"] = clean_tweet_url(c["url"])
 
-    # 若 film_title 是泛稱，描述也保持通用；否則點名具體片名 + 官網頁面
+    # 若 film_title 是泛稱，描述也保持通用；否則用成功下架的措辭格式
     is_generic = film_title.lower() in ("jaofilm series", "jaofilm", "")
     film_page  = original_url if original_url != COPYRIGHT_URL else None
 
     if is_generic:
         work_desc = (
-            "Original adult film(s) by JAOfilm / CHIH WEI JAO, "
-            "the sole copyright holder. "
-            "Exclusively distributed at jaofilm.com and authorized platforms only. "
-            "No license has been granted to any third party to post or redistribute this content."
+            "This is an original film/video production by JAOfilm. "
+            "I am the original creator and the exclusive copyright holder of this video. "
+            "The official source page can be verified at: https://jaofilm.com/films"
         )
     else:
-        page_ref = f" — official page: {film_page}" if film_page else ""
+        page_line = f" The official source page, which includes the trailer, can be verified at: {film_page}" if film_page else ""
         work_desc = (
-            f'Original adult film "{film_title}" by JAOfilm / CHIH WEI JAO{page_ref}. '
-            f"I am the sole copyright holder and creator of this work. "
-            f"This film is exclusively distributed at jaofilm.com and authorized platforms. "
-            f"No license has been granted to any third party to post or redistribute this content."
+            f'This is an original film/video production titled "{film_title}". '
+            f"I am the original creator and the exclusive copyright holder of this video."
+            f"{page_line}"
         )
 
     if is_generic:
         infringement_desc = (
-            "The linked post(s) on X (Twitter) contain or embed copyrighted film content "
-            "created and owned solely by JAOfilm / CHIH WEI JAO. "
-            "The original works are only available through jaofilm.com and authorized platforms. "
-            "These posts have not been authorized or licensed."
+            "The infringement consists of the direct uploading and distribution of my complete "
+            "video production within the user's tweet. The media attached to this post is exactly "
+            "the copyrighted material I own. I have not authorized this user to upload, share, or "
+            "distribute my full video. I request the immediate takedown of this post and the "
+            "associated media file."
         )
     else:
-        page_ref = f" The original film can be verified at: {film_page}" if film_page else ""
         infringement_desc = (
-            f'The linked post(s) on X (Twitter) contain or embed "{film_title}", '
-            f"a copyrighted film created and owned solely by JAOfilm / CHIH WEI JAO.{page_ref} "
-            f"This work is exclusively available at jaofilm.com and authorized platforms. "
-            f"These posts have not been authorized or licensed by the copyright holder."
+            f'The infringement consists of the direct uploading and distribution of my complete '
+            f'video production, "{film_title}", within the user\'s tweet. The media attached to '
+            f"this post is exactly the copyrighted material I own. I have not authorized this user "
+            f"to upload, share, or distribute my full video. I request the immediate takedown of "
+            f"this post and the associated media file."
         )
 
     ids_str = ", ".join(f"#{c['id']}" for c in cases)
@@ -215,9 +214,12 @@ async def run(cases: list):
         ok = await fill_by_name("city", CITY)
         print(f"  {'✅' if ok else '⚠️ '} City: {CITY}")
 
-        # Phone
-        ok = await fill_by_name("Form_number__c", PHONE)
-        print(f"  {'✅' if ok else '⚠️ '} Phone: {PHONE}")
+        # Phone（選填，成功表單為空，跳過）
+        if PHONE:
+            ok = await fill_by_name("Form_number__c", PHONE)
+            print(f"  {'✅' if ok else '⚠️ '} Phone: {PHONE}")
+        else:
+            print(f"  ℹ️  Phone: 空白（略過）")
 
         # 國家（required）
         ok = await select_by_name("country", COUNTRY_CODE)
