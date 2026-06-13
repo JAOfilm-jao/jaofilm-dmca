@@ -19,9 +19,9 @@ sleep 1
   "https://x.com" \
   &
 
-echo "✅ Chrome（@jaofilm_DMCA 專用）已開啟（port 9222）"
+echo "✅ Chrome（Wilson DMCA）已開啟（port 9222）"
 echo ""
-echo "   user-data-dir: ~/.jaofilm-dmca-chrome"
-echo "   請確認已登入 @jaofilm_DMCA（dmca@jaofilm.com），然後再按填表"
+echo "   user-data-dir: ~/.jaofilm-dmca-chrome（從 Profile 13 複製 session）"
+echo "   請確認 Twitter 已登入 @jaofilm_DMCA，然後再按填表"
 echo ""
 echo "   驗證連線：curl -s http://127.0.0.1:9222/json/version | python3 -m json.tool"
