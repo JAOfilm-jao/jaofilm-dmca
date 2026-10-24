@@ -36,7 +36,8 @@ Dashboard：`http://localhost:5002`（launchd 常駐，開機自動啟動）
 | → 「已移除」類型 | ping URL → 確認 404 → 自動標 removed |
 | → CF 含主機商 | 解析主機商 email → 自動補寄 host notice |
 | → 主機商拒絕 | 記備註（denied）|
-| 每 8 小時 | 案件 review → macOS 通知 |
+| 每 8 小時 | 案件 review → macOS 通知；有「需要你處理」的案件時**也傳 Telegram**（jao-notify warn） |
+| 自動確認下架時 | macOS 通知 ＋ Telegram（jao-notify info）。其餘通知（新案件調查完成、自動處理 CF 回信）只在 Mac：是你在電腦前觸發或例行事務 |
 
 ---
 

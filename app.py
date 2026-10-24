@@ -729,7 +729,7 @@ def check_all():
         if verdict == "removed":
             tracker.update(r["id"], "removed",
                            f"自動偵測 {label} ({date.today().isoformat()})")
-            _notify("JAOfilm DMCA ✅", f"{domain} 已確認下架（{n_down}/{n_total}）")
+            _notify("JAOfilm DMCA ✅", f"{domain} 已確認下架（{n_down}/{n_total}）", phone="info")
 
         results.append({
             "id": r["id"], "domain": domain, "url": r["url"],
@@ -756,7 +756,9 @@ def api_cases():
 
 # ── macOS 通知 ────────────────────────────────────────────────────────────────
 
-def _notify(title, message):
+def _notify(title, message, phone=None):
+    """Mac 通知；phone='info'/'warn' 時也送 Telegram（共用通知層 jao-notify，見 mac-workflow CLAUDE.md）。
+    只有背景發生、Wilson 不在電腦前也該知道的事才送手機。"""
     try:
         subprocess.run([
             "osascript", "-e",
@@ -764,6 +766,12 @@ def _notify(title, message):
         ], check=False)
     except Exception:
         pass
+    if phone:
+        try:
+            subprocess.run(["/opt/homebrew/bin/jao-notify", phone, "dmca", message],
+                           capture_output=True, timeout=40, check=False)
+        except Exception:
+            pass
 
 # ── 背景排程 ──────────────────────────────────────────────────────────────────
 
@@ -786,7 +794,7 @@ def check_human_actions():
     human_needed = [c for c in cases if c["action"]["type"] == "human"]
     if human_needed:
         labels = ", ".join(c["domain"] for c in human_needed[:3])
-        _notify("JAOfilm DMCA ⚠️", f"{len(human_needed)} 個案件需要你處理：{labels}")
+        _notify("JAOfilm DMCA ⚠️", f"{len(human_needed)} 個案件需要你處理：{labels}", phone="warn")
 
 # ── 啟動 ──────────────────────────────────────────────────────────────────────
 
