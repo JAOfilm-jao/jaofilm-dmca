@@ -119,7 +119,7 @@ bash open_chrome_debug.sh   # 開啟獨立 Chrome
 | Signature | CHIH WEI JAO（必須完全符合 First + Last）|
 | Email | dmca@jaofilm.com（由 @jaofilm_DMCA 帳號自動帶入，不需手動填）|
 | Country | Taiwan |
-| Copyright URL | https://jaofilm.com/films/{slug}（具體影片頁，從 films.json 帶入）|
+| Copyright URL | https://jaofilm.com/films/{slug}（具體影片頁，從網站 API 帶入：`/films-data` 讀 `wp-json/wp/v2/film`，失敗用 `films.cache.json`；2026-10-24 起 `films.json` 退場，片單 SoT = 網站 film 頁）|
 
 ---
 

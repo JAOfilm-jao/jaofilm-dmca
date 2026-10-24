@@ -166,17 +166,57 @@ def enrich_cases(rows):
 
 # ── 路由 ──────────────────────────────────────────────────────────────────────
 
+FILMS_API = "https://jaofilm.com/wp-json/wp/v2"
+FILMS_CACHE = Path(__file__).parent / "films.cache.json"   # 衍生快取（gitignored），網站連不上時用
+SERIES_BY_COLLECTION = {"original": "original", "the-boys": "theboys"}   # 其餘（collections、bts）歸 collections
+
+
+def _fetch_films():
+    """片單 SoT = 網站 film 頁（作品代號／演員／發行日，見 jaofilm-child CLAUDE.md「作品身分」）。
+    回傳前端既有格式：id(slug)、title、url、series、year、cast，另加 code。"""
+    import html
+    import json as _json
+    import urllib.request
+
+    def get(path):
+        req = urllib.request.Request(f"{FILMS_API}{path}", headers={"User-Agent": "jaofilm-dmca"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return _json.load(r)
+
+    collections = {c["id"]: c["slug"] for c in get("/collection?per_page=100&_fields=id,slug")}
+    films = []
+    for f in get("/film?per_page=100&_fields=slug,link,title,collection,work"):
+        slugs = [collections.get(i, "") for i in f.get("collection") or []]
+        series = next((SERIES_BY_COLLECTION[s] for s in slugs if s in SERIES_BY_COLLECTION), "collections")
+        work = f.get("work") or {}
+        date = work.get("release_date") or ""
+        films.append({
+            "id": f["slug"],
+            "code": work.get("code", ""),
+            "title": html.unescape(f["title"]["rendered"]),
+            "url": f["link"],
+            "series": series,
+            "year": int(date[:4]) if date[:4].isdigit() else None,
+            "cast": work.get("cast", []),
+        })
+    films.sort(key=lambda x: (x["year"] or 0, x["title"]), reverse=True)
+    return films
+
+
 @app.route("/films-data")
 def films_data():
-    """回傳 films.json 片單（供前端 dropdown 用）"""
+    """片單（供前端 dropdown 用）：讀網站 API，失敗時用上次成功的快取"""
     import json as _json
-    films_path = Path(__file__).parent / "films.json"
-    if films_path.exists():
-        return app.response_class(
-            response=films_path.read_text(encoding="utf-8"),
-            mimetype="application/json"
-        )
-    return jsonify([])
+    try:
+        films = _fetch_films()
+        FILMS_CACHE.write_text(_json.dumps(films, ensure_ascii=False, indent=2), encoding="utf-8")
+        return jsonify(films)
+    except Exception as e:
+        app.logger.warning(f"films API failed ({type(e).__name__}); using cache")
+        if FILMS_CACHE.exists():
+            return app.response_class(response=FILMS_CACHE.read_text(encoding="utf-8"),
+                                      mimetype="application/json")
+        return jsonify([])
 
 
 @app.route("/")
