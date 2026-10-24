@@ -787,14 +787,30 @@ def scheduled_monitor():
     print(f"[scheduler] monitor ran: {result.stdout.strip()[-200:]}")
 
 
+HUMAN_NOTIFIED = Path(__file__).parent / "logs" / ".human_notified.json"   # 已傳過 Telegram 的案件 id
+
+
 def check_human_actions():
-    """每天檢查是否有需要人工處理的案件"""
+    """每 8 小時檢查需要人工處理的案件：Mac 通知顯示總數；
+    Telegram 只在出現「還沒通知過的」案件時傳，避免同一批舊案件每 8 小時洗版。"""
     rows = tracker.list_all()
     cases = enrich_cases(rows)
     human_needed = [c for c in cases if c["action"]["type"] == "human"]
-    if human_needed:
+    try:
+        notified = set(json.loads(HUMAN_NOTIFIED.read_text()))
+    except Exception:
+        notified = None   # 第一次執行：現有案件當作已知，不補發
+    current = {c["id"] for c in human_needed}
+    new = [c for c in human_needed if notified is not None and c["id"] not in notified]
+    if human_needed and not new:
         labels = ", ".join(c["domain"] for c in human_needed[:3])
-        _notify("JAOfilm DMCA ⚠️", f"{len(human_needed)} 個案件需要你處理：{labels}", phone="warn")
+        _notify("JAOfilm DMCA ⚠️", f"{len(human_needed)} 個案件需要你處理：{labels}")
+    if new:
+        labels = ", ".join(c["domain"] for c in new[:5])
+        _notify("JAOfilm DMCA ⚠️", f"{len(new)} 個新案件需要你處理：{labels}（共 {len(human_needed)} 件待處理，見 localhost:5002）",
+                phone="warn")
+    HUMAN_NOTIFIED.parent.mkdir(exist_ok=True)
+    HUMAN_NOTIFIED.write_text(json.dumps(sorted(current)))   # 處理掉的會移出，日後再變回需要處理會再通知
 
 # ── 啟動 ──────────────────────────────────────────────────────────────────────
 
